@@ -107,6 +107,26 @@ struct HintMachineTests {
         #expect(b.phase == .idle)
     }
 
+    @Test func mouseDownAnywhereCancelsWhileScanningOrShowing() {
+        var scanning = HintMachine<Int>(alphabet: .homeRow)
+        _ = scanning.send(.trigger(.ready))
+        #expect(scanning.send(.mouseDown) == [.cancelScan, .captureKeys(false)])
+        #expect(scanning.phase == .idle)
+        var shown = showing(3)
+        #expect(shown.send(.mouseDown) == [.render(nil), .captureKeys(false)])
+        #expect(shown.phase == .idle)
+    }
+
+    @Test func mouseDownIsIgnoredWhenIdleOrPerforming() {
+        var idle = HintMachine<Int>(alphabet: .homeRow)
+        #expect(idle.send(.mouseDown) == [])
+        #expect(idle.phase == .idle)
+        var performing = showing(3)
+        _ = performing.send(.key(.letter("a")))
+        #expect(performing.send(.mouseDown) == [], "our own synthesized click must not end the perform")
+        #expect(performing.phase == .performing(1))
+    }
+
     @Test func lostKeyCaptureEndsTheSession() {
         var m = HintMachine<Int>(alphabet: .homeRow)
         _ = m.send(.trigger(.ready))

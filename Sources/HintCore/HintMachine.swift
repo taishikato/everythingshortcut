@@ -68,6 +68,8 @@ public enum Event<Target: Sendable>: Sendable {
     case trigger(TriggerGate)
     case scanned(ScanID, [Candidate<Target>])
     case key(KeyInput)
+    /// A mouse button went down anywhere. The click itself passes through to its target.
+    case mouseDown
     /// The action finished, succeeded or not.
     case performed
     /// The event tap could not be created or re-enabled.
@@ -92,10 +94,10 @@ public enum Effect<Target: Sendable>: Sendable {
 ///
 ///     idle        trigger(ready)     -> scanning(new id)  [captureKeys(true), startScan]
 ///     idle        trigger(blocked a) -> idle              [alert(a)]
-///     scanning    trigger | escape   -> idle              [cancelScan, captureKeys(false)]
+///     scanning    trigger | escape | mouseDown -> idle    [cancelScan, captureKeys(false)]
 ///     scanning(i) scanned(i, [])     -> idle              [captureKeys(false), alert(noHints)]
 ///     scanning(i) scanned(i, cs)     -> showing           [render(board)]
-///     showing     trigger | escape   -> idle              [render(nil), captureKeys(false)]
+///     showing     trigger | escape | mouseDown -> idle    [render(nil), captureKeys(false)]
 ///     showing     backspace          -> showing           [render(board)]       (no-op when typed is empty)
 ///     showing     letter, no match   -> showing           [alert(noMatch)]      (typed unchanged)
 ///     showing     letter, exact      -> performing(t)     [render(nil), captureKeys(false), perform(t)]
@@ -104,7 +106,8 @@ public enum Effect<Target: Sendable>: Sendable {
 ///     scanning|showing keyCaptureLost -> idle             [cancelScan?, render(nil)?, captureKeys(false), alert]
 ///
 /// Scan ids make stale results harmless. A cancelled scan's `scanned` event matches no state.
-/// A trigger while performing is ignored. Performing lasts one AX call plus at most one click.
+/// A trigger or mouse-down while performing is ignored, so our own synthesized click cannot end it.
+/// Performing lasts one AX call plus at most one click.
 public struct HintMachine<Target: Sendable>: Sendable {
     public private(set) var phase: Phase<Target> = .idle
     private let alphabet: Alphabet
@@ -123,7 +126,7 @@ public struct HintMachine<Target: Sendable>: Sendable {
         case (.idle, .trigger(.blocked(let alert))):
             return [.alert(alert)]
 
-        case (.scanning, .trigger), (.scanning, .key(.escape)):
+        case (.scanning, .trigger), (.scanning, .key(.escape)), (.scanning, .mouseDown):
             phase = .idle
             return [.cancelScan, .captureKeys(false)]
 
@@ -136,7 +139,7 @@ public struct HintMachine<Target: Sendable>: Sendable {
             phase = .showing(board)
             return [.render(board)]
 
-        case (.showing, .trigger), (.showing, .key(.escape)):
+        case (.showing, .trigger), (.showing, .key(.escape)), (.showing, .mouseDown):
             phase = .idle
             return [.render(nil), .captureKeys(false)]
 
