@@ -31,13 +31,16 @@ struct EndToEnd {
 
         checkPlanWithoutAX(&log)
 
-        await log.step("trigger shows hints, scan under 500 ms") {
+        await log.step("trigger shows hints and no app's scan stopped on the budget or the node limit") {
             let shown = try await link.press([.trigger], then: "showing")
             try save(shown, as: "scan.json")
-            let ms = shown.lastScan?.durationMs ?? .infinity
-            let slowest = (shown.lastScan?.apps ?? []).sorted { $0.durationMs > $1.durationMs }.prefix(3)
-                .map { "pid \($0.pid) \(Int($0.durationMs)) ms\($0.stop.map { ", stopped: \($0)" } ?? "")" }
-            return (ms < 500, "\(Int(ms)) ms, \(shown.hints.count) hints, slowest: \(slowest.joined(separator: "; "))")
+            guard let scan = shown.lastScan else { return (false, "the snapshot has no scan") }
+            let slowest = scan.apps.sorted { $0.durationMs > $1.durationMs }.prefix(3)
+                .map { "pid \($0.pid) \(Int($0.durationMs)) ms" }
+            let stopped = scan.apps.compactMap { app in app.stop.map { (pid: app.pid, why: $0) } }
+            let cutShort = stopped.filter { $0.why == "budget" || $0.why == "nodeLimit" }
+            let stops = stopped.isEmpty ? "none" : stopped.map { "pid \($0.pid) \($0.why)" }.joined(separator: "; ")
+            return (cutShort.isEmpty, "\(Int(scan.durationMs)) ms, \(shown.hints.count) hints, slowest: \(slowest.joined(separator: "; ")), stopped: \(stops)")
         }
 
         await log.step("visible fixture controls have hints and the covered button has none") {
