@@ -188,9 +188,13 @@ actor AppProbe {
         }
 
         // The liveness check. Reading the app element's role is also what turns on Chromium's basic
-        // web accessibility (chrome_browser_application_mac.mm:488-505), and Arc drops its tree when
-        // idle, so it runs on every scan.
-        guard rootAttribute({ () throws(ReadError) in try reader.string(app, kAXRoleAttribute) }) != nil else { return finish() }
+        // web accessibility (chrome_browser_application_mac.mm:488-505) for the life of the process,
+        // and Arc drops its tree when idle, so it runs on every scan that traverses a window, menu bar
+        // or Dock. An extras-only job skips it: its one `AXExtrasMenuBar` read is the liveness check,
+        // and it never wakes accessibility in a Chromium app whose windows we do not walk.
+        if !job.isExtrasOnly {
+            guard rootAttribute({ () throws(ReadError) in try reader.string(app, kAXRoleAttribute) }) != nil else { return finish() }
+        }
 
         var roots: [Root] = []
         if job.menuBar, let menuBar = rootAttribute({ () throws(ReadError) in try reader.element(app, kAXMenuBarAttribute) }) {

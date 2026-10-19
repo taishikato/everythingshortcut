@@ -99,7 +99,7 @@ public struct AppScanDump: Codable, Hashable, Sendable {
     public let stop: String?
     /// Candidates before occlusion and deduplication.
     public let candidates: Int
-    /// The raw search result count of each web area. Every scan reads the app's `AXRole` first.
+    /// The raw search result count of each web area. Every job but an extras-only one reads the app's `AXRole` first.
     public let webAreaResults: [Int]
     /// Attribute name to what the probe found and did, for `AXEnhancedUserInterface` and `AXManualAccessibility`.
     public let webFlags: [String: String]

@@ -179,7 +179,8 @@ That generic parameter keeps AX handles out of the core without an ID registry.
 5. `Scanner` takes one `WindowSnapshot` and the displays, computes the `ScanPlan`, and assigns each job a queue from `ProbeQueues`.
    A task group runs one `AppProbe.scan` per app.
 6. Each probe sets a 50 ms messaging timeout on its app element when the job is extras-only.
-   It reads the app element's `AXRole`, which is a liveness check and also wakes Chromium's web accessibility.
+   A job that walks a window, the menu bar or the Dock first reads the app element's `AXRole`, which is a liveness check and also wakes Chromium's web accessibility.
+   An extras-only job skips that read, and its one `AXExtrasMenuBar` read is the liveness check.
    It then walks its roots with `Traversal.harvest` over `AXReader`.
    For each root it passes a cover test built from the windows in front of that root's surface, so a subtree hidden behind one window costs one IPC.
    It stores each found `AXUIElement` in its own `slots` and returns `Candidate<ElementRef>` values.
@@ -323,7 +324,8 @@ Each result goes back through `RoleTable.rule(for:)`, and only `.hint` roles bec
 Results are terminal and are never descended into.
 If a web area does not answer the search, the traversal falls back to `.children`.
 
-Every scan first reads the app element's `AXRole`, which turns on Chromium's basic web accessibility.
+Every scan that walks an app's windows, menu bar or Dock first reads the app element's `AXRole`, which turns on Chromium's basic web accessibility.
+Extras-only jobs skip it, so a Chromium app whose windows are all hidden is never woken.
 If a web area's search then returns no results, the probe reads `AXEnhancedUserInterface` (Chromium) and `AXManualAccessibility` (Electron) on that app.
 It sets each one to true only if it is not already true, and never sets either back to false.
 Reading before writing keeps repeated scans from restarting Chromium's 2 s timer, and setting false would destroy Chromium's web tree.
@@ -476,6 +478,7 @@ Candidate B became the base, 27 points to 23, and the cross-judge and the orches
 - We accept no hints on custom-drawn native controls exposed as `AXGroup` or `AXImage`, in exchange for half the IPCs per node during the scan.
 - We accept one `AXExtrasMenuBar` read for each of about 71 apps per scan, in exchange for finding third-party extras on macOS 26, where Control Center owns every status window.
 - We accept that clicking a background element raises its window and changes the window order, in exchange for real-click parity and a visible result.
+- We accept that the `AXRole` read turns on Chromium basic accessibility for the life of each Chromium or Electron app that has an exposed window, in exchange for web hints without `AXEnhancedUserInterface`.
 - We accept that a Chromium app's first scan after launch may lack web hints, because Chromium waits 2 s before enabling full accessibility.
   In exchange, apps without web content never get the flag and its window-manager side effects.
 - We accept judging partial occlusion at one point, the center of the visible frame.
