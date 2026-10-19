@@ -35,7 +35,7 @@ private enum Sample {
     static let locked = WindowSnapshot(windows: [shield] + unlocked.windows)
 
     static func plan(_ s: WindowSnapshot) -> ScanPlan {
-        let running = RunningApps(frontmost: appA, dock: dock, mayOwnStatusItems: [me, controlCenter, menuExtraApp, appA])
+        let running = RunningApps(frontmost: appA, dock: dock, controlCenter: controlCenter, mayOwnStatusItems: [me, controlCenter, menuExtraApp, appA])
         return ScanPlan.make(snapshot: s, displays: displays, running: running, selfPID: me)
     }
 }
@@ -93,8 +93,32 @@ struct WindowStackTests {
             c(3, Sample.appB, .window(Sample.b.id), 1200, 800),
             c(4, Sample.appA, .window(Sample.a.id), -500, 400),
         ]
-        let kept = Visibility.filter(input, snapshot: Sample.unlocked, displays: Sample.displays, selfPID: Sample.me)
-        #expect(kept.map(\.target) == [1])
+        let kept = Visibility.filter(input, snapshot: Sample.unlocked, displays: Sample.displays, selfPID: Sample.me, controlCenter: Sample.controlCenter)
+        #expect(kept.candidates.map(\.target) == [1])
+    }
+
+    @Test func statusItemsDedupeByFrameKeepingTheOwnerAppOverControlCenter() {
+        let wifiFrame = GlobalRect(x: 1405, y: 2, width: 30, height: 28)
+        let clockFrame = GlobalRect(x: 1455, y: 2, width: 50, height: 28)
+        let fromOwner = Candidate(target: 1, pid: Sample.menuExtraApp, surface: .statusItem, frame: wifiFrame)
+        let fromControlCenter = Candidate(target: 2, pid: Sample.controlCenter, surface: .statusItem, frame: wifiFrame)
+        let clock = Candidate(target: 3, pid: Sample.controlCenter, surface: .statusItem, frame: clockFrame)
+        for input in [[fromControlCenter, clock, fromOwner], [fromOwner, fromControlCenter, clock]] {
+            let result = Visibility.filter(input, snapshot: Sample.unlocked, displays: Sample.displays, selfPID: Sample.me, controlCenter: Sample.controlCenter)
+            #expect(Set(result.candidates.map(\.target)) == [1, 3])
+            #expect(result.droppedStatusItems == [StatusItemDuplicate(frame: wifiFrame, kept: Sample.menuExtraApp, dropped: Sample.controlCenter)])
+        }
+    }
+
+    @Test func otherSurfacesStillDedupeByPidAndFrame() {
+        let frame = GlobalRect(x: 1200, y: 800, width: 20, height: 10)
+        let input = [
+            Candidate(target: 1, pid: Sample.appB, surface: .window(Sample.b.id), frame: frame),
+            Candidate(target: 2, pid: Sample.appA, surface: .window(Sample.b.id), frame: frame),
+        ]
+        let result = Visibility.filter(input, snapshot: Sample.unlocked, displays: Sample.displays, selfPID: Sample.me, controlCenter: Sample.controlCenter)
+        #expect(result.candidates.map(\.target) == [1, 2])
+        #expect(result.droppedStatusItems.isEmpty)
     }
 
     @Test func parsesCGWindowListEntries() {

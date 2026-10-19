@@ -134,13 +134,17 @@ public struct AppScan: Hashable, Sendable {
 public struct RunningApps: Hashable, Sendable {
     public var frontmost: PID?
     public var dock: PID?
+    /// Found by bundle id `com.apple.controlcenter`. On macOS 26 it may expose another app's extra
+    /// as its own, so status-item deduplication prefers every other owner over it.
+    public var controlCenter: PID?
     /// Regular and accessory apps. Any of them may own a menu bar extra, and on macOS 26 the window
     /// list attributes every extra's window to Control Center, so it cannot narrow this set.
     public var mayOwnStatusItems: [PID]
 
-    public init(frontmost: PID?, dock: PID?, mayOwnStatusItems: [PID]) {
+    public init(frontmost: PID?, dock: PID?, controlCenter: PID?, mayOwnStatusItems: [PID]) {
         self.frontmost = frontmost
         self.dock = dock
+        self.controlCenter = controlCenter
         self.mayOwnStatusItems = mayOwnStatusItems
     }
 }
@@ -210,20 +214,64 @@ public enum Visibility {
         return false
     }
 
-    /// Keeps candidates whose hit point is on a display and not covered, then drops exact duplicates
-    /// (same pid and visible frame), keeping the first. Order is preserved.
+    /// Keeps candidates whose hit point is on a display and not covered, then drops duplicates.
+    /// Order is preserved.
+    ///
+    /// Menu bar extras deduplicate by frame alone, because one extra may be exposed both by its owner
+    /// app and by Control Center. The winner does not depend on input order: any app beats Control
+    /// Center, then the lower pid wins. Every other surface deduplicates by pid and frame, first wins.
     public static func filter<Target>(
         _ candidates: [Candidate<Target>],
         snapshot: WindowSnapshot,
         displays: [Display],
-        selfPID: PID
-    ) -> [Candidate<Target>] {
-        var seen = Set<DedupeKey>()
-        return candidates.filter { c in
+        selfPID: PID,
+        controlCenter: PID?
+    ) -> VisibleCandidates<Target> {
+        let visible = candidates.filter { c in
             displays.containing(c.hitPoint) != nil
                 && isVisible(c.hitPoint, surface: c.surface, pid: c.pid, in: snapshot, selfPID: selfPID)
-                && seen.insert(DedupeKey(pid: c.pid, frame: c.frame)).inserted
         }
+
+        func rank(_ i: Int) -> (Int, PID, Int) { (visible[i].pid == controlCenter ? 1 : 0, visible[i].pid, i) }
+        var statusWinner: [GlobalRect: Int] = [:]
+        for (i, c) in visible.enumerated() where c.surface == .statusItem {
+            if let current = statusWinner[c.frame], rank(current) < rank(i) { continue }
+            statusWinner[c.frame] = i
+        }
+
+        var seen = Set<DedupeKey>()
+        var kept: [Candidate<Target>] = []
+        var dropped: [StatusItemDuplicate] = []
+        for (i, c) in visible.enumerated() {
+            if c.surface == .statusItem {
+                if let winner = statusWinner[c.frame], winner != i {
+                    dropped.append(StatusItemDuplicate(frame: c.frame, kept: visible[winner].pid, dropped: c.pid))
+                    continue
+                }
+            } else {
+                guard seen.insert(DedupeKey(pid: c.pid, frame: c.frame)).inserted else { continue }
+            }
+            kept.append(c)
+        }
+        return VisibleCandidates(candidates: kept, droppedStatusItems: dropped)
+    }
+}
+
+public struct VisibleCandidates<Target: Sendable>: Sendable {
+    public let candidates: [Candidate<Target>]
+    /// Menu bar extras dropped because another element had the same frame.
+    public let droppedStatusItems: [StatusItemDuplicate]
+}
+
+public struct StatusItemDuplicate: Hashable, Sendable {
+    public let frame: GlobalRect
+    public let kept: PID
+    public let dropped: PID
+
+    public init(frame: GlobalRect, kept: PID, dropped: PID) {
+        self.frame = frame
+        self.kept = kept
+        self.dropped = dropped
     }
 }
 
