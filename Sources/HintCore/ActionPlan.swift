@@ -1,10 +1,10 @@
 /// How a chosen element gets "clicked". Set once in `HintConfig.standard`.
-/// Flipping the policy after an experiment is a one-word change there.
+/// The policy chooses press versus click only. Whether to raise the window first depends on the surface.
 public enum ClickPolicy: Hashable, Sendable {
     /// `AXPress` when the element advertises it, otherwise a synthesized left click.
     /// AXPress fires on the first attempt even in an inactive window and never moves the cursor.
     case pressWhenAdvertised
-    /// Always a synthesized left click at the hit point (Vimac's behavior).
+    /// Always a synthesized left click at the hit point, as Vimac does. Unlike Vimac, `.window` surfaces still raise first.
     case alwaysClick
 }
 
@@ -12,8 +12,9 @@ public enum ClickPolicy: Hashable, Sendable {
 public struct ActionPlan: Hashable, Sendable {
     public enum Act: Hashable, Sendable {
         /// `AXPress`. If the app answers `kAXErrorActionUnsupported` or `kAXErrorFailure`,
-        /// click `fallback` instead. `kAXErrorCannotComplete` counts as done, because pressing a
-        /// menu bar item blocks the reply until the menu closes, and a second click would re-toggle.
+        /// click `fallback` instead. `kAXErrorCannotComplete` counts as done. The request reached the
+        /// app and only the reply timed out, or a menu bar item blocked it until its menu closed, so
+        /// a fallback click could press twice.
         case press(fallback: GlobalPoint)
         /// Synthesized mouseDown/mouseUp at the point via the HID tap, then the cursor is restored.
         case click(GlobalPoint)

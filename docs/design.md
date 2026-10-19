@@ -99,7 +99,7 @@ case .perform(let target):
 ```
 
 Settings later edit one value.
-Flipping the click policy is one word, and adding a hintable role is one line.
+Choosing press or click is one word, and adding a hintable role is one line.
 
 ```swift
 // Sources/HintCore/Config.swift
@@ -276,7 +276,8 @@ The probe reads `AXUIElementCopyActionNames` for the chosen element only, one IP
    Activation goes through AX because cooperative activation lets macOS 14 and later ignore an agent app's `activate` request.
 2. Act.
    If the element advertises `AXPress`, the probe presses it.
-   `kAXErrorCannotComplete` counts as done, because pressing a menu bar item blocks the reply until the menu closes, and clicking again would close it.
+   `kAXErrorCannotComplete` counts as done on purpose.
+   The request reached the app and only the reply timed out, or a menu bar item blocked the reply until its menu closed, so a fallback click could press twice.
    Any other failure falls back to a click.
 3. Click, when there is no `AXPress` or the press failed.
    After a raise, the probe waits up to 150 ms for the app to report frontmost, so the click lands on an active window instead of only activating it.
@@ -286,7 +287,9 @@ Background windows therefore come forward and the action fires, as with a real c
 AXPress is first because it acts on the first attempt even where a view ignores first mouse, and it never moves the cursor.
 Menu bar items, extras and Dock items are never raised.
 Text fields advertise no `AXPress`, so they get a click, which focuses them and places the caret with no special case.
-`.alwaysClick` is the one-word flip to Vimac's synthesized-only behavior if an experiment favors it.
+The policy chooses press versus click only.
+`.alwaysClick` makes every act a synthesized click, as Vimac does, but `.window` surfaces still raise first, because `ActionPlan.make` decides the raise from the surface alone.
+Vimac never raises, so matching it fully would also need a change to the raise rule.
 
 Every perform returns a `PerformReport` with the plan, the `AXError` that `AXPress` returned or the fact that a click ran, and whether the app was frontmost before and after.
 The DEBUG snapshot carries the last report, so the first trusted run shows which path each surface takes.
@@ -532,6 +535,8 @@ The DEBUG snapshot of one `scripts/e2e.sh` run answers each of these.
 
 These need a product decision rather than a measurement.
 
+- Should a background window be raised before pressing, or should the press act in place?
+  Today `.window` surfaces always raise, under either policy.
 - Are `AXGroup` controls that advertise `AXPress` common enough to justify a `.hintIfPressable` rule that reads action names for selected roles only?
 - Should a display change while hints are showing cancel the session?
   Today each render lays out against the current displays.

@@ -297,8 +297,8 @@ actor AppProbe {
             let error = AXUIElementPerformAction(s.element, kAXPressAction as CFString)
             switch error {
             case .success, .cannotComplete:
-                // cannotComplete counts as done: pressing a menu bar item blocks the reply until the
-                // menu closes, and a second click would close it again.
+                // cannotComplete counts as done. The request reached the app and only the reply timed
+                // out, or a menu bar item blocked it until its menu closed, so a click could press twice.
                 act = .pressed(error)
             default:
                 click(fallback, afterRaise: raised)
