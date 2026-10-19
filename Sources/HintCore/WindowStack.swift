@@ -128,6 +128,10 @@ public struct AppScan: Hashable, Sendable {
     public var dock = false
 
     public init(pid: PID) { self.pid = pid }
+
+    /// Reads only `AXExtrasMenuBar`. Such jobs cost one or two IPCs, so they get their own queue lanes
+    /// and a shorter messaging timeout (`HintConfig.extrasMessagingTimeout`).
+    public var isExtrasOnly: Bool { statusItems && windows.isEmpty && !menuBar && !dock }
 }
 
 /// What the window list cannot say about running apps. Read from NSWorkspace at trigger time.

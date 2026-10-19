@@ -57,6 +57,15 @@ struct WindowStackTests {
         #expect(apps[Sample.claude] == nil)
     }
 
+    @Test func onlyAppsWithNothingButExtrasAreExtrasOnly() {
+        let apps = Dictionary(uniqueKeysWithValues: Sample.plan(Sample.unlocked).apps.map { ($0.pid, $0) })
+        #expect(apps[Sample.menuExtraApp]?.isExtrasOnly == true)
+        #expect(apps[Sample.controlCenter]?.isExtrasOnly == true)
+        #expect(apps[Sample.appA]?.isExtrasOnly == false, "windows and the menu bar too")
+        #expect(apps[Sample.appB]?.isExtrasOnly == false)
+        #expect(apps[Sample.dock]?.isExtrasOnly == false)
+    }
+
     @Test func lockScreenShieldPlansNothing() {
         #expect(Sample.plan(Sample.locked).apps.isEmpty)
     }

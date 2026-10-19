@@ -9,6 +9,9 @@ public struct HintConfig: Sendable {
     public var scanBudget: Duration
     /// Upper bound on one AX IPC. Applied process-wide through the system-wide element.
     public var axMessagingTimeout: Duration
+    /// Upper bound on one AX IPC for extras-only jobs, set on that app's element. Extras matter less
+    /// than windows, and about 71 apps may own one, so a hung app costs its lane less (Vimac uses 50 ms).
+    public var extrasMessagingTimeout: Duration
     public var clickPolicy: ClickPolicy
     public var roles: RoleTable
     /// Per-app cap on AX nodes read in one scan. Guards against huge trees (Preview, Mail).
@@ -19,6 +22,7 @@ public struct HintConfig: Sendable {
         alphabet: Alphabet,
         scanBudget: Duration,
         axMessagingTimeout: Duration,
+        extrasMessagingTimeout: Duration,
         clickPolicy: ClickPolicy,
         roles: RoleTable,
         maxNodesPerApp: Int
@@ -27,6 +31,7 @@ public struct HintConfig: Sendable {
         self.alphabet = alphabet
         self.scanBudget = scanBudget
         self.axMessagingTimeout = axMessagingTimeout
+        self.extrasMessagingTimeout = extrasMessagingTimeout
         self.clickPolicy = clickPolicy
         self.roles = roles
         self.maxNodesPerApp = maxNodesPerApp
@@ -37,6 +42,7 @@ public struct HintConfig: Sendable {
         alphabet: .homeRow,
         scanBudget: .milliseconds(300),
         axMessagingTimeout: .milliseconds(150),
+        extrasMessagingTimeout: .milliseconds(50),
         clickPolicy: .pressWhenAdvertised,
         roles: .standard,
         maxNodesPerApp: 6000
