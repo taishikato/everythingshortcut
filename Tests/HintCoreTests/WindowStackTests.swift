@@ -76,6 +76,19 @@ struct WindowStackTests {
         #expect(Visibility.isVisible(underA, surface: .window(Sample.a.id), pid: Sample.appA, in: s, selfPID: Sample.me))
     }
 
+    @Test func coverTestCountsOnlyOccludersInFrontOfTheSurface() {
+        let s = Sample.unlocked
+        let insideAOverB = GlobalRect(x: 550, y: 350, width: 50, height: 50)
+        let coveredForB = Visibility.coverTest(surface: .window(Sample.b.id), pid: Sample.appB, in: s, selfPID: Sample.me)
+        let coveredForA = Visibility.coverTest(surface: .window(Sample.a.id), pid: Sample.appA, in: s, selfPID: Sample.me)
+        #expect(coveredForB(insideAOverB))
+        #expect(!coveredForB(GlobalRect(x: 1000, y: 700, width: 50, height: 50)), "that part of B is exposed")
+        #expect(!coveredForB(GlobalRect(x: 850, y: 350, width: 100, height: 50)), "straddles A's edge, so one window does not contain it")
+        #expect(!coveredForA(insideAOverB), "nothing opaque is in front of A there")
+        let coveredForMenuBar = Visibility.coverTest(surface: .menuBar, pid: Sample.appA, in: s, selfPID: Sample.me)
+        #expect(!coveredForMenuBar(GlobalRect(x: 0, y: 0, width: 1512, height: 65)), "the alpha-0 window and our overlay never cover")
+    }
+
     @Test func dockItemHiddenByAnotherAppsWindowInFront() {
         let s = Sample.unlocked
         let dockPoint = GlobalPoint(x: 700, y: 950)

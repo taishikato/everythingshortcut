@@ -45,8 +45,14 @@ private final class FakeTree: ElementReader {
         }
     }
 
-    func harvest(_ root: Int = 1, clip: GlobalRect = GlobalRect(x: 0, y: 0, width: 1000, height: 1000), maxNodes: Int = 1000, shouldStop: () -> Bool = { false }) -> Harvest<Int> {
-        Traversal.harvest(root: root, clip: clip, reader: self, roles: .standard, maxNodes: maxNodes, shouldStop: shouldStop)
+    func harvest(
+        _ root: Int = 1,
+        clip: GlobalRect = GlobalRect(x: 0, y: 0, width: 1000, height: 1000),
+        maxNodes: Int = 1000,
+        isFullyCovered: (GlobalRect) -> Bool = { _ in false },
+        shouldStop: () -> Bool = { false }
+    ) -> Harvest<Int> {
+        Traversal.harvest(root: root, clip: clip, reader: self, roles: .standard, maxNodes: maxNodes, isFullyCovered: isFullyCovered, shouldStop: shouldStop)
     }
 }
 
@@ -75,6 +81,19 @@ struct TraversalTests {
         let h = t.harvest()
         #expect(h.found.map(\.element) == [3, 5])
         #expect(!t.calls.contains("children 6"), "a container with a frame outside the clip is still pruned")
+    }
+
+    @Test func subtreeBehindOneFrontWindowCostsOneCall() {
+        let t = FakeTree()
+        t.add(1, "AXWindow", 0, 0, 500, 500, children: [2, 5])
+        t.add(2, "AXGroup", 0, 0, 200, 200, children: [3, 4])
+        t.add(3, "AXButton", 10, 10, 50, 20)
+        t.add(4, "AXButton", 10, 40, 50, 20)
+        t.add(5, "AXButton", 300, 300, 50, 20)
+        let front = GlobalRect(x: 0, y: 0, width: 250, height: 250)
+        let h = t.harvest(isFullyCovered: { front.contains($0) })
+        #expect(h.found.map(\.element) == [5])
+        #expect(t.calls == ["facts 1", "children 1", "facts 2", "facts 5"])
     }
 
     @Test func hintsWithoutAVisibleFrameAreNotCandidates() {
@@ -198,7 +217,7 @@ struct TraversalTests {
         t.add(1, "AXWindow", 0, 0, 500, 500, children: [2])
         t.add(2, "AXButton", 0, 0, 50, 20)
         var checks = 0
-        let h = t.harvest { checks += 1; return checks > 2 }
+        let h = t.harvest(shouldStop: { checks += 1; return checks > 2 })
         #expect(h.found.isEmpty)
         #expect(h.stop == .budget)
     }

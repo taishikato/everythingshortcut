@@ -214,6 +214,18 @@ public enum Visibility {
         return false
     }
 
+    /// A cover test for `Traversal.harvest` on one root. True only when a single occluding window in
+    /// front of the window `surface` draws into contains all of the rect, so nothing in it can be seen.
+    /// Rects hidden by several windows together return false, and `filter` settles those later.
+    public static func coverTest(surface: Surface, pid: PID, in snapshot: WindowSnapshot, selfPID: PID) -> (GlobalRect) -> Bool {
+        var inFront: [GlobalRect] = []
+        for w in snapshot.windows {
+            if surface.isAnchor(w, pid: pid) { break }
+            if w.occludes(selfPID: selfPID) { inFront.append(w.bounds) }
+        }
+        return { rect in inFront.contains { $0.contains(rect) } }
+    }
+
     /// Keeps candidates whose hit point is on a display and not covered, then drops duplicates.
     /// Order is preserved.
     ///

@@ -66,6 +66,8 @@ public enum Traversal {
     ///   outside the clip, so off-screen subtrees cost one IPC total.
     /// - A missing or empty frame is common on structural nodes (the Dock's `AXApplication` root,
     ///   SwiftUI and web groups). Such a container passes its clip through. Such a hint is no candidate.
+    /// - A node whose visible frame `isFullyCovered` reports as hidden is skipped with its subtree,
+    ///   before its children are read. The scanner builds the closure per root with `Visibility.coverTest`.
     /// - Breadth-first order visits toolbars and sidebars before deep document content, so a walk
     ///   cut short by the budget or node limit still returns the shallow controls.
     /// - `shouldStop` is checked before every IPC. Cancellation and the scan deadline both feed it.
@@ -76,13 +78,15 @@ public enum Traversal {
         reader: R,
         roles: RoleTable,
         maxNodes: Int,
+        isFullyCovered: (GlobalRect) -> Bool,
         shouldStop: () -> Bool
     ) -> Harvest<R.Element> {
         var result = Harvest<R.Element>()
         var queue: [(element: R.Element, clip: GlobalRect)] = [(root, clip)]
         var head = 0
 
-        /// Nil skips the node and its subtree: the read failed, or the frame lies outside `clip`.
+        /// Nil skips the node and its subtree: the read failed, the frame lies outside `clip`, or a
+        /// window in front hides all of it.
         func read(_ element: R.Element, within clip: GlobalRect) -> (NodeFacts, Placement)? {
             if shouldStop() { result.stop = .budget; return nil }
             if result.nodesRead >= maxNodes { result.stop = .nodeLimit; return nil }
@@ -91,7 +95,7 @@ public enum Traversal {
                 result.nodesRead += 1
                 guard let frame = facts.frame, !frame.isEmpty else { return (facts, .frameless) }
                 let visible = frame.intersection(clip)
-                return visible.isEmpty ? nil : (facts, .visible(visible))
+                return visible.isEmpty || isFullyCovered(visible) ? nil : (facts, .visible(visible))
             } catch {
                 result.nodesRead += 1
                 if error == .unresponsive { result.stop = .unresponsive }
