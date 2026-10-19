@@ -180,11 +180,20 @@ struct TraversalTests {
         #expect(t.calls.contains("search 1") && t.calls.contains("children 1"))
     }
 
-    @Test func emptyWebAreaIsReported() {
+    @Test func eachSearchedWebAreaReportsItsRawResultCount() {
         let t = FakeTree()
-        t.add(1, "AXWebArea", 0, 0, 500, 500)
-        t.nodes[1]?.search = []
-        #expect(t.harvest().emptySearchContainers == 1)
+        t.add(1, "AXWindow", 0, 0, 500, 500, children: [2, 3, 4])
+        t.add(2, "AXWebArea", 0, 0, 500, 100)
+        t.nodes[2]?.search = []
+        t.add(3, "AXWebArea", 0, 100, 500, 100)
+        t.nodes[3]?.search = [5, 6]
+        t.add(4, "AXWebArea", 0, 200, 500, 100, children: [7])
+        t.add(5, "AXLink", 0, 100, 50, 20)
+        t.add(6, "AXStaticText", 0, 130, 50, 20)
+        t.add(7, "AXLink", 0, 200, 50, 20)
+        let h = t.harvest()
+        #expect(h.webAreaResults == [0, 2], "a web area without search support falls back and is not counted")
+        #expect(h.found.map(\.element) == [5, 7])
     }
 
     @Test func unresponsiveAppStopsWithPartialResult() {

@@ -53,9 +53,9 @@ public struct Harvest<Element> {
     public var nodesRead = 0
     /// Nil when the walk finished. Otherwise `found` is a valid partial result.
     public var stop: StopReason?
-    /// Web areas whose search returned nothing. The probe uses this to turn on Chromium/Electron
-    /// accessibility for the next scan.
-    public var emptySearchContainers = 0
+    /// The raw result count of each web area that answered the search, in visit order.
+    /// A zero makes the probe turn on Chromium and Electron accessibility for the next scan.
+    public var webAreaResults: [Int] = []
 }
 
 public enum Traversal {
@@ -136,7 +136,7 @@ public enum Traversal {
                 let childClip = if clips, case .visible(let frame) = placement { frame } else { clip }
                 guard let (kids, terminal) = children(of: element, from: source) else { continue }
                 if terminal {
-                    if kids.isEmpty { result.emptySearchContainers += 1 }
+                    result.webAreaResults.append(kids.count)
                     for kid in kids {
                         guard result.stop == nil else { break }
                         guard case let (kidFacts, .visible(kidFrame))? = read(kid, within: childClip),
