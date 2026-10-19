@@ -31,8 +31,10 @@ struct EndToEnd {
 
         checkPlanWithoutAX(&log)
 
+        var scanned: SessionSnapshot?
         await log.step("trigger shows hints and no app's scan stopped on the budget or the node limit") {
             let shown = try await link.press([.trigger], then: "showing")
+            scanned = shown
             try save(shown, as: "scan.json")
             guard let scan = shown.lastScan else { return (false, "the snapshot has no scan") }
             let slowest = scan.apps.sorted { $0.durationMs > $1.durationMs }.prefix(3)
@@ -41,6 +43,22 @@ struct EndToEnd {
             let cutShort = stopped.filter { $0.why == "budget" || $0.why == "nodeLimit" }
             let stops = stopped.isEmpty ? "none" : stopped.map { "pid \($0.pid) \($0.why)" }.joined(separator: "; ")
             return (cutShort.isEmpty, "\(Int(scan.durationMs)) ms, \(shown.hints.count) hints, slowest: \(slowest.joined(separator: "; ")), stopped: \(stops)")
+        }
+
+        await log.step("every exposed menu bar, status item and Dock window yields hints") {
+            guard let shown = scanned else { return (false, "no scan to inspect") }
+            let exposed = Desktop.windowSnapshot().exposed(displays: Desktop.displays(), selfPID: appPID)
+            let dock = Desktop.runningApps().dock
+            let expected = [
+                (surface: "statusItem", exposed: exposed.contains { $0.layer == WindowLayer.status }),
+                (surface: "menuBar", exposed: exposed.contains { $0.layer == WindowLayer.mainMenu }),
+                (surface: "dock", exposed: exposed.contains { $0.layer == WindowLayer.dock && $0.owner == dock }),
+            ]
+            let counts = Dictionary(grouping: shown.hints) { $0.surface.hasPrefix("window:") ? "window" : $0.surface }.mapValues(\.count)
+            let missing = expected.filter { $0.exposed && counts[$0.surface, default: 0] == 0 }.map(\.surface)
+            let report = expected.map { "\($0.surface) \(counts[$0.surface, default: 0]) (window \($0.exposed ? "exposed" : "not exposed"))" }
+                + ["window \(counts["window", default: 0])"]
+            return (missing.isEmpty, "\(report.joined(separator: ", ")), missing: \(missing)")
         }
 
         await log.step("visible fixture controls have hints and the covered button has none") {
@@ -122,8 +140,6 @@ struct EndToEnd {
         let ids = Set(snapshot.windows.map(\.id))
         let backID = WindowID(UInt32(fixture.back.windowNumber))
         let frontID = WindowID(UInt32(fixture.front.windowNumber))
-        let appPID = NSRunningApplication.runningApplications(withBundleIdentifier: "com.taishikato.EverythingShortcut").first
-            .map { PID($0.processIdentifier) } ?? PID(-1)
         func visible(_ name: String) -> Bool {
             guard let frame = fixture.frame(of: name) else { return false }
             return Visibility.isVisible(frame.center, surface: .window(backID), pid: Desktop.selfPID, in: snapshot, selfPID: appPID)
@@ -131,6 +147,12 @@ struct EndToEnd {
         let ok = ids.contains(backID) && ids.contains(frontID) && !visible("back-covered") && visible("back-visible")
         log.record("the window stack has both fixture windows, back-covered hidden and back-visible exposed", ok,
                    "Back #\(backID.raw) listed: \(ids.contains(backID)), Front #\(frontID.raw) listed: \(ids.contains(frontID))")
+    }
+
+    /// The app's pid, which its own scan never plans, so exposure is judged as the app judges it.
+    private var appPID: PID {
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.taishikato.EverythingShortcut").first
+            .map { PID($0.processIdentifier) } ?? PID(-1)
     }
 
     private struct Pressed {

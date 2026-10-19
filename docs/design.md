@@ -405,6 +405,7 @@ Verification has five layers, and only the last needs a person once.
    It drives the app over `DistributedNotificationCenter`, and the app writes each reply atomically to the path named in the request.
    The app's DEBUG hook posts real keystrokes with `CGEventPost(.cghidEventTap)`, so they pass through Carbon hotkey matching and our own session tap.
    The hook cannot call the reducer, so a passing run exercises the real hotkey, tap, scan and press path.
+   Beyond the fixture, it requires at least one `statusItem`, `menuBar` or `dock` hint whenever the live window stack exposes a status-level, main-menu or Dock window, so the run also proves the surfaces outside the fixture.
    es-dev prints `VERIFIED` or `NOT VERIFIED` for each check and saves a `screencapture -x` of the badges under `build/e2e/`.
 5. The one manual step is granting Accessibility to `build/EverythingShortcut.app`.
 
