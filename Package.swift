@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "EverythingShortcut", targets: ["EverythingShortcut"]),
+        .executable(name: "es-dev", targets: ["es-dev"]),
     ],
     targets: [
         // Imports nothing beyond the Swift standard library, so the core cannot reach AppKit, AX or Carbon.
@@ -18,6 +19,8 @@ let package = Package(
             dependencies: ["HintCore", "Desktop", "AutomationWire"],
             linkerSettings: [.linkedFramework("Carbon"), .linkedFramework("ApplicationServices")]
         ),
+        // Developer tool for an untrusted shell: the window dump, the fixture, and the e2e driver.
+        .executableTarget(name: "es-dev", dependencies: ["HintCore", "Desktop", "AutomationWire"]),
         .testTarget(name: "HintCoreTests", dependencies: ["HintCore"]),
     ]
 )
