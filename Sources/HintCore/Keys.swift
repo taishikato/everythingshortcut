@@ -30,6 +30,13 @@ public struct HotKey: Hashable, Sendable {
 
     /// Homerow's and Shortcat's default.
     public static let commandShiftSpace = HotKey(keyCode: VirtualKey.space, modifiers: [.command, .shift])
+
+    /// The chord as macOS menus write it, modifiers in the order ⌃⌥⇧⌘.
+    public var displayName: String {
+        let symbols: [(Modifiers, String)] = [(.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
+        let key = keyCode == VirtualKey.space ? "Space" : "key \(keyCode)"
+        return symbols.filter { modifiers.contains($0.0) }.map(\.1).joined() + key
+    }
 }
 
 /// What a key press means to the hint session. Everything else is swallowed and dropped.

@@ -15,6 +15,11 @@ struct KeyRoutingTests {
         #expect(route(13, [.command], "w") == .swallow(nil))
     }
 
+    @Test func triggerChordIsNamedInMenuOrder() {
+        #expect(HotKey.commandShiftSpace.displayName == "⇧⌘Space")
+        #expect(HotKey(keyCode: VirtualKey.space, modifiers: [.command, .control, .option, .shift]).displayName == "⌃⌥⇧⌘Space")
+    }
+
     @Test func escapeBackspaceAndLetters() {
         #expect(route(VirtualKey.escape) == .swallow(.escape))
         #expect(route(VirtualKey.delete) == .swallow(.backspace))
