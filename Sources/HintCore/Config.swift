@@ -13,6 +13,9 @@ public struct HintConfig: Sendable {
     /// than windows, and about 71 apps may own one, so a hung app costs its lane less (Vimac uses 50 ms).
     public var extrasMessagingTimeout: Duration
     public var clickPolicy: ClickPolicy
+    /// After raising a background window, how long a click waits for its app to report frontmost,
+    /// so the click lands on an active window instead of only activating it.
+    public var frontmostWait: Duration
     public var roles: RoleTable
     /// Per-app cap on AX nodes read in one scan. Guards against huge trees (Preview, Mail).
     public var maxNodesPerApp: Int
@@ -24,6 +27,7 @@ public struct HintConfig: Sendable {
         axMessagingTimeout: Duration,
         extrasMessagingTimeout: Duration,
         clickPolicy: ClickPolicy,
+        frontmostWait: Duration,
         roles: RoleTable,
         maxNodesPerApp: Int
     ) {
@@ -33,6 +37,7 @@ public struct HintConfig: Sendable {
         self.axMessagingTimeout = axMessagingTimeout
         self.extrasMessagingTimeout = extrasMessagingTimeout
         self.clickPolicy = clickPolicy
+        self.frontmostWait = frontmostWait
         self.roles = roles
         self.maxNodesPerApp = maxNodesPerApp
     }
@@ -44,6 +49,7 @@ public struct HintConfig: Sendable {
         axMessagingTimeout: .milliseconds(150),
         extrasMessagingTimeout: .milliseconds(50),
         clickPolicy: .pressWhenAdvertised,
+        frontmostWait: .milliseconds(150),
         roles: .standard,
         maxNodesPerApp: 6000
     )
