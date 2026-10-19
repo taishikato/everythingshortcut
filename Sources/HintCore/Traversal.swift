@@ -135,7 +135,9 @@ public enum Traversal {
                     if kids.isEmpty { result.emptySearchContainers += 1 }
                     for kid in kids {
                         guard result.stop == nil else { break }
-                        guard case let (kidFacts, .visible(kidFrame))? = read(kid, within: childClip), kidFacts.isEnabled else { continue }
+                        guard case let (kidFacts, .visible(kidFrame))? = read(kid, within: childClip),
+                              kidFacts.isEnabled, roles.rule(for: kidFacts.role) == .hint
+                        else { continue }
                         result.found.append(Found(element: kid, role: kidFacts.role, visibleFrame: kidFrame))
                     }
                 } else {

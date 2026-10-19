@@ -6,7 +6,8 @@ public enum ChildrenSource: Hashable, Sendable {
     case visibleRows
     /// `AXUIElementsForSearchPredicate` with `AXVisibleOnly`, matching any of `keys`.
     /// One IPC returns every visible interactive descendant of a web area.
-    /// The results are terminal: each one is a candidate and is never descended into.
+    /// The results are terminal and never descended into. Each one is a candidate only if its own
+    /// role's rule is `.hint`, so the table decides hintability for web content too.
     /// If the element does not support the parameterized attribute, traversal falls back to `.children`.
     case searchPredicate(keys: [String])
 }
@@ -26,7 +27,7 @@ public enum RoleRule: Hashable, Sendable {
 ///
 /// Hintability is decided by role alone. The scan never calls `AXUIElementCopyActionNames`,
 /// which would double the IPC count per node. Action names are read once, for the chosen
-/// element only, by the action planner. See DESIGN.md, "Role table".
+/// element only, by the action planner. See docs/design.md, "Hintable-role table".
 ///
 /// Adding a role is one line in `standard`. Flipping a role between hint and container is one word.
 public struct RoleTable: Sendable {

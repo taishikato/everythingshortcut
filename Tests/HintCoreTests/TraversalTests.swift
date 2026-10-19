@@ -128,13 +128,28 @@ struct TraversalTests {
     @Test func webAreaSearchHitsAreTerminal() {
         let t = FakeTree()
         t.add(1, "AXWebArea", 0, 0, 500, 500)
-        t.nodes[1]?.search = [2, 3]
+        t.nodes[1]?.search = [2]
         t.add(2, "AXLink", 0, 0, 50, 20, children: [4])
-        t.add(3, "AXGroup", 0, 30, 50, 20)
         t.add(4, "AXLink", 0, 0, 10, 10)
         let h = t.harvest()
-        #expect(h.found.map(\.element) == [2, 3])
+        #expect(h.found.map(\.element) == [2])
         #expect(!t.calls.contains("children 2"))
+    }
+
+    @Test func webSearchResultsPassThroughTheRoleTable() {
+        let t = FakeTree()
+        t.add(1, "AXWebArea", 0, 0, 500, 500)
+        t.nodes[1]?.search = [2, 3, 4, 5, 6, 7]
+        t.add(2, "AXLink", 0, 0, 50, 20)
+        t.add(3, "AXGroup", 0, 30, 50, 20, children: [8])
+        t.add(4, "AXStaticText", 0, 60, 50, 20)
+        t.add(5, "AXButton", 0, 90, 50, 20, enabled: false)
+        t.add(6, "AXTextField", 0, 120, 50, 20)
+        t.add(7, "AXWebArea", 0, 150, 50, 20)
+        t.add(8, "AXButton", 0, 30, 10, 10)
+        let h = t.harvest()
+        #expect(h.found.map(\.element) == [2, 6])
+        #expect(!t.calls.contains("children 3") && !t.calls.contains("search 7"), "search results are never descended into")
     }
 
     @Test func webAreaWithoutSearchFallsBackToChildren() {
