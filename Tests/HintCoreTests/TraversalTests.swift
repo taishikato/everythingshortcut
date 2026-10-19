@@ -18,6 +18,10 @@ private final class FakeTree: ElementReader {
         nodes[id] = Node(facts: NodeFacts(role: role, frame: GlobalRect(x: x, y: y, width: w, height: h), isEnabled: enabled), children: children)
     }
 
+    func add(_ id: Int, _ role: String, frame: GlobalRect?, children: [Int] = []) {
+        nodes[id] = Node(facts: NodeFacts(role: role, frame: frame), children: children)
+    }
+
     func facts(of element: Int) throws(ReadError) -> NodeFacts {
         calls.append("facts \(element)")
         guard let node = nodes[element] else { throw .unavailable }
@@ -57,6 +61,29 @@ struct TraversalTests {
         #expect(h.found.map(\.element) == [3])
         #expect(!t.calls.contains("children 2"))
         #expect(!t.calls.contains("facts 4"))
+    }
+
+    @Test func containersWithoutFramesPassTheClipThrough() {
+        let t = FakeTree()
+        t.add(1, "AXApplication", frame: nil, children: [2])
+        t.add(2, "AXGroup", frame: nil, children: [3, 4, 6])
+        t.add(3, "AXDockItem", 100, 900, 50, 50)
+        t.add(4, "AXGroup", frame: .empty, children: [5])
+        t.add(5, "AXButton", 200, 900, 50, 50)
+        t.add(6, "AXGroup", 2000, 0, 100, 100, children: [7])
+        t.add(7, "AXButton", 2010, 10, 50, 20)
+        let h = t.harvest()
+        #expect(h.found.map(\.element) == [3, 5])
+        #expect(!t.calls.contains("children 6"), "a container with a frame outside the clip is still pruned")
+    }
+
+    @Test func hintsWithoutAVisibleFrameAreNotCandidates() {
+        let t = FakeTree()
+        t.add(1, "AXWindow", 0, 0, 500, 500, children: [2, 3, 4])
+        t.add(2, "AXButton", frame: nil)
+        t.add(3, "AXButton", frame: GlobalRect(x: 10, y: 10, width: 0, height: 20))
+        t.add(4, "AXButton", 10, 40, 50, 20)
+        #expect(t.harvest().found.map(\.element) == [4])
     }
 
     @Test func scrollAreasClipAndGroupsDoNot() {

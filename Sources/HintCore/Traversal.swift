@@ -2,11 +2,12 @@
 /// (`AXUIElementCopyMultipleAttributeValues` over role, position, size, enabled).
 public struct NodeFacts: Hashable, Sendable {
     public var role: String
-    public var frame: GlobalRect
+    /// Nil when the element reports no position or size.
+    public var frame: GlobalRect?
     /// Elements that do not report `AXEnabled` count as enabled.
     public var isEnabled: Bool
 
-    public init(role: String, frame: GlobalRect, isEnabled: Bool = true) {
+    public init(role: String, frame: GlobalRect?, isEnabled: Bool = true) {
         self.role = role
         self.frame = frame
         self.isEnabled = isEnabled
@@ -61,8 +62,10 @@ public enum Traversal {
     /// Breadth-first walk of one root (a window, a menu bar, the Dock list) under `roles`.
     ///
     /// Invariants:
-    /// - Each node costs one `facts` IPC. A node costs a `children` IPC only when its rule is
-    ///   `.container` and its visible frame is non-empty. Off-screen subtrees cost one IPC total.
+    /// - Each node costs one `facts` IPC. A container costs a `children` IPC unless its frame lies
+    ///   outside the clip, so off-screen subtrees cost one IPC total.
+    /// - A missing or empty frame is common on structural nodes (the Dock's `AXApplication` root,
+    ///   SwiftUI and web groups). Such a container passes its clip through. Such a hint is no candidate.
     /// - Breadth-first order visits toolbars and sidebars before deep document content, so a walk
     ///   cut short by the budget or node limit still returns the shallow controls.
     /// - `shouldStop` is checked before every IPC. Cancellation and the scan deadline both feed it.
@@ -79,14 +82,16 @@ public enum Traversal {
         var queue: [(element: R.Element, clip: GlobalRect)] = [(root, clip)]
         var head = 0
 
-        func read(_ element: R.Element, within clip: GlobalRect) -> (NodeFacts, GlobalRect)? {
+        /// Nil skips the node and its subtree: the read failed, or the frame lies outside `clip`.
+        func read(_ element: R.Element, within clip: GlobalRect) -> (NodeFacts, Placement)? {
             if shouldStop() { result.stop = .budget; return nil }
             if result.nodesRead >= maxNodes { result.stop = .nodeLimit; return nil }
             do throws(ReadError) {
                 let facts = try reader.facts(of: element)
                 result.nodesRead += 1
-                let visible = facts.frame.intersection(clip)
-                return visible.isEmpty ? nil : (facts, visible)
+                guard let frame = facts.frame, !frame.isEmpty else { return (facts, .frameless) }
+                let visible = frame.intersection(clip)
+                return visible.isEmpty ? nil : (facts, .visible(visible))
             } catch {
                 result.nodesRead += 1
                 if error == .unresponsive { result.stop = .unresponsive }
@@ -114,24 +119,24 @@ public enum Traversal {
         while head < queue.count, result.stop == nil {
             let (element, clip) = queue[head]
             head += 1
-            guard let (facts, visible) = read(element, within: clip) else { continue }
+            guard let (facts, placement) = read(element, within: clip) else { continue }
 
             switch roles.rule(for: facts.role) {
             case .skip:
                 continue
             case .hint:
-                if facts.isEnabled {
-                    result.found.append(Found(element: element, role: facts.role, visibleFrame: visible))
+                if facts.isEnabled, case .visible(let frame) = placement {
+                    result.found.append(Found(element: element, role: facts.role, visibleFrame: frame))
                 }
             case .container(let source, let clips):
-                let childClip = clips ? visible : clip
+                let childClip = if clips, case .visible(let frame) = placement { frame } else { clip }
                 guard let (kids, terminal) = children(of: element, from: source) else { continue }
                 if terminal {
                     if kids.isEmpty { result.emptySearchContainers += 1 }
                     for kid in kids {
                         guard result.stop == nil else { break }
-                        guard let (kidFacts, kidVisible) = read(kid, within: childClip), kidFacts.isEnabled else { continue }
-                        result.found.append(Found(element: kid, role: kidFacts.role, visibleFrame: kidVisible))
+                        guard case let (kidFacts, .visible(kidFrame))? = read(kid, within: childClip), kidFacts.isEnabled else { continue }
+                        result.found.append(Found(element: kid, role: kidFacts.role, visibleFrame: kidFrame))
                     }
                 } else {
                     queue.append(contentsOf: kids.map { ($0, childClip) })
@@ -140,4 +145,11 @@ public enum Traversal {
         }
         return result
     }
+}
+
+/// Where a node sits relative to its clip, once its frame is known to intersect it.
+private enum Placement {
+    case visible(GlobalRect)
+    /// No frame, or an empty one. Not drawable, so never a candidate, but its children may be.
+    case frameless
 }
