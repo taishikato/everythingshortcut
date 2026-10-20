@@ -81,8 +81,10 @@ struct EndToEnd {
             guard let twoLetter = all.hints.first(where: { $0.label.count == 2 }), let letter = twoLetter.label.first else {
                 return (false, "only \(all.hints.count) hints, so no two-letter label to narrow with")
             }
-            let narrowed = try await link.press([.letters(String(letter))])
-            let restored = try await link.press([.backspace])
+            _ = try await link.press([.letters(String(letter))])
+            let narrowed = try await link.waitFor(typed: String(letter))
+            _ = try await link.press([.backspace])
+            let restored = try await link.waitFor(typed: "")
             let ok = narrowed.typed == String(letter) && narrowed.hints.allSatisfy { $0.label.first == letter }
                 && narrowed.hints.count < all.hints.count && restored.typed.isEmpty && restored.hints.count == all.hints.count
             return (ok, "\(all.hints.count) hints, \(narrowed.hints.count) after '\(letter)', \(restored.hints.count) after backspace")
@@ -249,12 +251,14 @@ final class AppLink {
         case noReply(AutomationCommand)
         case rejected(String)
         case phaseNotReached(String, last: String)
+        case typedNotReached(String, last: String)
 
         var description: String {
             switch self {
             case .noReply(let command): "no reply to \(command)"
             case .rejected(let reason): "the app rejected the request: \(reason)"
             case .phaseNotReached(let phase, let last): "phase stayed \(last), expected \(phase)"
+            case .typedNotReached(let typed, let last): "typed prefix stayed '\(last)', expected '\(typed)'"
             }
         }
     }
@@ -304,6 +308,18 @@ final class AppLink {
             last = try await status()
         }
         guard last.phase == phase else { throw Failure.phaseNotReached(phase, last: last.phase) }
+        return last
+    }
+
+    /// Polls until the event tap has applied the keystrokes and the typed prefix equals `typed`.
+    func waitFor(typed: String, timeout: Duration = .seconds(2)) async throws -> SessionSnapshot {
+        let until = ContinuousClock.now + timeout
+        var last = try await status()
+        while last.typed != typed, ContinuousClock.now < until {
+            try await Task.sleep(for: .milliseconds(30))
+            last = try await status()
+        }
+        guard last.typed == typed else { throw Failure.typedNotReached(typed, last: last.typed) }
         return last
     }
 
