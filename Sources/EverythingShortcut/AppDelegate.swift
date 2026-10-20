@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assert(CGWindowLevelForKey(.dockWindow) == Int32(WindowLayer.dock))
         assert(CGWindowLevelForKey(.mainMenuWindow) == Int32(WindowLayer.mainMenu))
         assert(CGWindowLevelForKey(.statusWindow) == Int32(WindowLayer.status))
+        assert(CGWindowLevelForKey(.screenSaverWindow) == Int32(WindowLayer.overlay))
+        assert(NSWindow.Level.screenSaver.rawValue == WindowLayer.overlay)
         if CommandLine.arguments.contains(AutomationChannel.launchArgument) {
             let server = AutomationServer(controller: controller)
             server.start()

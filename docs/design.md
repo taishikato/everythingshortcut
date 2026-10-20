@@ -217,7 +217,7 @@ That generic parameter keeps AX handles out of the core without an ID registry.
 3. `KeyCapture` enables the session tap.
    From here on, letters never reach the frontmost app, and a mouse-down anywhere sends `.mouseDown`.
 4. The controller reads `RunningApps` from NSWorkspace on main and starts a task that awaits `Scanner.scan`, which is `@concurrent` and leaves the main actor.
-5. `Scanner` takes one `WindowSnapshot` and the displays, computes the `ScanPlan`, and assigns each job a queue from `ProbeQueues`.
+5. `Scanner` takes one `WindowSnapshot` and the displays, computes the `ScanPlan`, and assigns each job a lane from `ProbeQueues`.
    A task group runs one `AppProbe.scan` per app.
 6. Each probe sets a 50 ms messaging timeout on its app element when the job is extras-only.
    A job that walks a window, the menu bar or the Dock first reads the app element's `AXRole`, which is a liveness check and also wakes Chromium's web accessibility.
@@ -275,8 +275,9 @@ No AX or CG type appears on any of those signatures.
 
 Every `AXUIElement` is created, used and released inside one `AppProbe` actor.
 That is the whole rule.
-The probe's executor is a `DispatchSerialQueue` from a fixed pool, set through `nonisolated var unownedExecutor`.
-Swift isolation therefore confines each element to one serial queue, and the compiler checks it.
+The probe's executor is its `ProbeLane`, set through `nonisolated var unownedExecutor`.
+For another app that is a `DispatchSerialQueue` from a fixed pool, and for our own process it is the main actor's executor.
+Swift isolation therefore confines each element to one serial executor, and the compiler checks it.
 The values that leave a probe are Sendable by construction.
 `Candidate<ElementRef>` carries an `ElementRef`, which is the owning actor plus an `Int` slot.
 To act on an element, a caller asks its owner, and `perform(slot:policy:)` runs on the owner's queue.
@@ -304,7 +305,11 @@ No watchdog task races the scan.
 `withTaskGroup` waits for every child even after `cancelAll`, so a race cannot return before a blocked AX call returns.
 The bound comes from the timeout and the per-IPC deadline check instead.
 
-Our own pid is never planned, because AX calls into our own process must run on main (`docs/research.md`, section 5).
+Our own windows are planned like any other app's, and their probe runs on the main lane.
+AX calls into our own process are not IPC: AppKit answers them on the calling thread, and SwiftUI asserts the main queue.
+A press on our own SwiftUI button from a global queue crashed in `dispatch_assert_queue`, and on the main queue it read our windows in 13 ms and pressed the button with its action already run when the press returned.
+`ProbeQueues.assign` gives our job `ProbeLane.main` and every other job a queue.
+Our own menu bar and status item are never planned, because pressing either opens a menu whose tracking loop would run inside the press, on main.
 
 ## Click policy
 
@@ -396,7 +401,8 @@ Each pass is a pure function in `WindowStack.swift`.
    A node whose clipped frame lies entirely inside one of them is skipped with its subtree, before its children are read.
 3. After the scan, `Visibility.filter` keeps a candidate only if a click at its hit point would land on its own surface.
    The hit point is the center of the visible frame.
-   Alpha-0 windows and our own windows never occlude.
+   Alpha-0 windows and our own overlay never occlude.
+   Our other windows occlude like any app's, so badges for what is behind them are dropped.
 
 The filter then removes duplicates.
 Menu bar extras deduplicate by frame alone, because on macOS 26 an extra may appear under both its owner app's `AXExtrasMenuBar` and Control Center's.

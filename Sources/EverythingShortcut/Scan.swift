@@ -60,9 +60,9 @@ struct Scanner: Sendable {
         let plan = ScanPlan.make(snapshot: snapshot, displays: displays, running: running, selfPID: selfPID)
         let config = config
         let harvests = await withTaskGroup(of: AppHarvest.self, returning: [AppHarvest].self) { group in
-            for (job, queue) in ProbeQueues.assign(plan.apps) {
+            for (job, lane) in ProbeQueues.assign(plan.apps, selfPID: selfPID) {
                 group.addTask {
-                    await AppProbe(pid: job.pid, queue: queue, config: config)
+                    await AppProbe(pid: job.pid, lane: lane, config: config)
                         .scan(job, snapshot: snapshot, displays: displays, selfPID: selfPID, deadline: deadline)
                 }
             }
@@ -126,26 +126,32 @@ struct AppHarvest: Sendable {
 /// `PerformReport` out of `perform`. The session's board keeps the probe alive through its
 /// `ElementRef`s. Dropping the board (cancel, perform done, next trigger) releases the probe and its elements.
 ///
-/// Threading. The actor's executor is a serial dispatch queue from `ProbeQueues`. AX calls are
-/// blocking Mach IPC, so they never run on a Swift cooperative-pool thread. Apps on different queues
-/// scan in parallel. One app's roots run in sequence, since the target app answers AX on its main
-/// thread anyway. Probes sharing a queue are separate actors that take turns on it.
+/// Threading. The actor's executor is its `ProbeLane`. For another app it is a serial dispatch queue
+/// from `ProbeQueues`: AX calls are blocking Mach IPC, so they never run on a Swift cooperative-pool
+/// thread. Apps on different queues scan in parallel. One app's roots run in sequence, since the target
+/// app answers AX on its main thread anyway. Probes sharing a queue are separate actors that take turns
+/// on it. For our own process it is the main actor's executor (see `ProbeLane.main`).
 ///
 /// Deadline. Every IPC is bounded by a messaging timeout, and the probe checks the scan deadline
 /// before each IPC. So `scan` returns by `deadline + axMessagingTimeout` with no watchdog task.
 actor AppProbe {
     nonisolated let pid: PID
-    private let queue: DispatchSerialQueue
+    private let lane: ProbeLane
     private let config: HintConfig
     private let app: AXUIElement
     private let reader = AXReader()
     private var slots: [Slot] = []
 
-    nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
+    nonisolated var unownedExecutor: UnownedSerialExecutor {
+        switch lane {
+        case .queue(let queue): queue.asUnownedSerialExecutor()
+        case .main: MainActor.sharedUnownedExecutor
+        }
+    }
 
-    init(pid: PID, queue: DispatchSerialQueue, config: HintConfig) {
+    init(pid: PID, lane: ProbeLane, config: HintConfig) {
         self.pid = pid
-        self.queue = queue
+        self.lane = lane
         self.config = config
         app = AXUIElementCreateApplication(pid.raw)
     }
@@ -315,8 +321,9 @@ actor AppProbe {
         )
     }
 
-    /// Posts a left click through the HID tap, then puts the cursor back. Blocking waits are fine here,
-    /// because this is the probe's own queue.
+    /// Posts a left click through the HID tap, then puts the cursor back. Blocking waits are fine on another
+    /// app's probe queue. On the main lane they stall the app, which only an element of ours with no
+    /// `AXPress` reaches.
     private func click(_ point: GlobalPoint, afterRaise: Bool) {
         if afterRaise {
             let until = ContinuousClock.now + config.frontmostWait
@@ -342,8 +349,17 @@ actor AppProbe {
     }
 }
 
-/// The fixed set of queues all AX work runs on. Bounds blocked threads to 8 however many apps a scan
-/// touches (71 apps may own menu bar extras on the development machine).
+/// Where a probe's AX calls run.
+enum ProbeLane: Sendable {
+    /// One of the eight queues. AX calls into another app are blocking Mach IPC.
+    case queue(DispatchSerialQueue)
+    /// Our own process. AX calls into it are not IPC: AppKit answers on the calling thread, and SwiftUI
+    /// asserts the main queue (measured: a press from a global queue crashed in `dispatch_assert_queue`).
+    case main
+}
+
+/// The fixed set of queues all AX work into other apps runs on. Bounds blocked threads to 8 however
+/// many apps a scan touches (71 apps may own menu bar extras on the development machine).
 /// Extras-only jobs cost one or two IPCs each and get their own two lanes, so they never queue behind
 /// a window traversal that uses the whole budget. A hung app stalls its lane for one messaging timeout,
 /// then its probe stops, so lane-mates still run within the budget.
@@ -351,17 +367,18 @@ enum ProbeQueues {
     static let light = (0..<2).map { DispatchSerialQueue(label: "everything-shortcut.ax.light.\($0)", qos: .userInitiated) }
     static let heavy = (0..<6).map { DispatchSerialQueue(label: "everything-shortcut.ax.heavy.\($0)", qos: .userInitiated) }
 
-    /// Round-robin within each lane, in plan order.
-    static func assign(_ jobs: [AppScan]) -> [(AppScan, DispatchSerialQueue)] {
+    /// Our own job runs on main. Every other job goes round-robin within its lane, in plan order.
+    static func assign(_ jobs: [AppScan], selfPID: PID) -> [(AppScan, ProbeLane)] {
         var lightIndex = 0
         var heavyIndex = 0
         return jobs.map { job in
+            if job.pid == selfPID { return (job, .main) }
             if job.isExtrasOnly {
                 defer { lightIndex += 1 }
-                return (job, light[lightIndex % light.count])
+                return (job, .queue(light[lightIndex % light.count]))
             }
             defer { heavyIndex += 1 }
-            return (job, heavy[heavyIndex % heavy.count])
+            return (job, .queue(heavy[heavyIndex % heavy.count]))
         }
     }
 }

@@ -18,6 +18,8 @@ public enum WindowLayer {
     public static let dock = 20
     public static let mainMenu = 24
     public static let status = 25
+    /// `NSWindow.Level.screenSaver`, where our overlay panels live.
+    public static let overlay = 1000
 }
 
 /// One on-screen window from `CGWindowListCopyWindowInfo`.
@@ -38,10 +40,14 @@ public struct WindowInfo: Hashable, Sendable {
         self.bounds = bounds
     }
 
+    /// One of our overlay panels. They are transparent, so they never occlude and are never planned.
+    /// Every other window we own is an ordinary window.
+    func isOverlay(selfPID: PID) -> Bool { owner == selfPID && layer == WindowLayer.overlay }
+
     /// Whether this window can hide what is behind it.
     /// Alpha-0 windows (the invisible 1512x65 window in the grounding sample) and our own
-    /// overlay never occlude.
-    public func occludes(selfPID: PID) -> Bool { alpha > 0 && owner != selfPID && !bounds.isEmpty }
+    /// overlay never occlude. Our other windows do, so badges for what is behind them are dropped.
+    public func occludes(selfPID: PID) -> Bool { alpha > 0 && !bounds.isEmpty && !isOverlay(selfPID: selfPID) }
 }
 
 /// The on-screen window stack, front to back. Taken once per scan and shared by the plan
@@ -83,7 +89,7 @@ public struct WindowSnapshot: Hashable, Sendable {
         var result: [WindowInfo] = []
         for w in windows {
             defer { if w.occludes(selfPID: selfPID) { occludersInFront.append(w.bounds) } }
-            guard w.owner != selfPID, w.alpha > 0 else { continue }
+            guard !w.isOverlay(selfPID: selfPID), w.alpha > 0 else { continue }
             let onScreen = w.bounds.intersection(screen)
             guard !onScreen.isEmpty, !occludersInFront.contains(where: { $0.contains(onScreen) }) else { continue }
             result.append(w)
@@ -158,12 +164,13 @@ public struct ScanPlan: Hashable, Sendable {
     public let apps: [AppScan]
 
     /// Derives the whole scan from one window snapshot plus the running-app list.
-    /// - App windows: exposed windows below Dock level, per owner.
-    /// - Menu bar: the frontmost app, when an exposed main-menu-level window exists.
-    /// - Menu bar extras: every app in `mayOwnStatusItems`, when any status-level window is exposed.
+    /// - App windows: exposed windows below Dock level, per owner, our own included.
+    /// - Menu bar: the frontmost app, when an exposed main-menu-level window exists, unless that app is us.
+    /// - Menu bar extras: every app in `mayOwnStatusItems` except us, when any status-level window is exposed.
     ///   Each costs one `AXExtrasMenuBar` read, and most apps answer it with no value.
     /// - Dock: the Dock pid, when it owns an exposed Dock-level window. A hidden Dock is skipped.
-    /// Our own pid is never planned. AX calls into our own process would have to run on main.
+    /// Our own menu bar and status item are never planned: pressing either opens a menu whose tracking
+    /// loop would run inside the press, and AX calls into our own process run on the main thread.
     /// A lock screen or screensaver shield leaves nothing exposed, so the plan is empty.
     public static func make(
         snapshot: WindowSnapshot,
@@ -173,7 +180,6 @@ public struct ScanPlan: Hashable, Sendable {
     ) -> ScanPlan {
         var apps: [PID: AppScan] = [:]
         func edit(_ pid: PID, _ change: (inout AppScan) -> Void) {
-            guard pid != selfPID else { return }
             change(&apps[pid, default: AppScan(pid: pid)])
         }
         var statusWindowExposed = false
@@ -184,7 +190,7 @@ public struct ScanPlan: Hashable, Sendable {
             case WindowLayer.dock where w.owner == running.dock:
                 edit(w.owner) { $0.dock = true }
             case WindowLayer.mainMenu:
-                if let frontmost = running.frontmost { edit(frontmost) { $0.menuBar = true } }
+                if let frontmost = running.frontmost, frontmost != selfPID { edit(frontmost) { $0.menuBar = true } }
             case WindowLayer.status:
                 statusWindowExposed = true
             default:
@@ -192,7 +198,7 @@ public struct ScanPlan: Hashable, Sendable {
             }
         }
         if statusWindowExposed {
-            for pid in running.mayOwnStatusItems { edit(pid) { $0.statusItems = true } }
+            for pid in running.mayOwnStatusItems where pid != selfPID { edit(pid) { $0.statusItems = true } }
         }
         return ScanPlan(apps: apps.values.sorted { $0.pid < $1.pid })
     }
@@ -203,7 +209,7 @@ public enum Visibility {
     ///
     /// Find the anchor window (the window the surface draws into that contains `point`), then
     /// require that no occluding window in front of it contains `point`. Alpha-0 windows and our own
-    /// windows never occlude. No anchor means the element is not on screen.
+    /// overlay never occlude. No anchor means the element is not on screen.
     public static func isVisible(
         _ point: GlobalPoint,
         surface: Surface,

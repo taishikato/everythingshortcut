@@ -20,7 +20,7 @@ private enum Sample {
         WindowInfo(id: WindowID(id), owner: pid, ownerName: name, layer: layer, alpha: alpha, bounds: GlobalRect(x: x, y: y, width: width, height: height))
     }
 
-    static let overlay = w(1, me, "EverythingShortcut", layer: 1500, 0, 0, 1512, 982)
+    static let overlay = w(1, me, "EverythingShortcut", layer: WindowLayer.overlay, 0, 0, 1512, 982)
     static let invisible = w(2, claude, "Claude", layer: 26, alpha: 0, 0, 0, 1512, 65)
     static let wifi = w(3, controlCenter, "Control Center", layer: 25, 1400, 0, 40, 33)
     static let clock = w(4, controlCenter, "Control Center", layer: 25, 1450, 0, 60, 33)
@@ -53,8 +53,42 @@ struct WindowStackTests {
         #expect(apps[Sample.appA]?.statusItems == true)
         #expect(apps[Sample.appB]?.statusItems == false)
         #expect(apps[Sample.dock]?.dock == true)
-        #expect(apps[Sample.me] == nil)
+        #expect(apps[Sample.me] == nil, "our only window here is the overlay, and our extras are never planned")
         #expect(apps[Sample.claude] == nil)
+    }
+
+    @Test func ourWindowIsPlannedButNotOurMenuBarOrExtras() {
+        let settings = Sample.w(50, Sample.me, "EverythingShortcut", layer: 0, 300, 150, 480, 500)
+        let snapshot = WindowSnapshot(windows: [Sample.overlay, Sample.wifi, Sample.menuBar, settings, Sample.a, Sample.dockWindow])
+        let running = RunningApps(frontmost: Sample.me, dock: Sample.dock, controlCenter: Sample.controlCenter, mayOwnStatusItems: [Sample.me, Sample.controlCenter, Sample.appA])
+        let apps = Dictionary(uniqueKeysWithValues: ScanPlan.make(snapshot: snapshot, displays: Sample.displays, running: running, selfPID: Sample.me).apps.map { ($0.pid, $0) })
+        #expect(apps[Sample.me]?.windows == [settings])
+        #expect(apps[Sample.me]?.menuBar == false, "pressing our own menu bar would run its menu inside the press")
+        #expect(apps[Sample.me]?.statusItems == false)
+        #expect(!apps.values.contains { $0.menuBar }, "while we are frontmost the menu bar on screen is ours, so nobody's is planned")
+        #expect(apps[Sample.appA]?.windows == [Sample.a], "A sticks out from under our window")
+        #expect(apps[Sample.appA]?.statusItems == true)
+    }
+
+    @Test func ourWindowOccludesAndOurOverlayDoesNot() {
+        let settings = Sample.w(50, Sample.me, "EverythingShortcut", layer: 0, 300, 150, 480, 500)
+        let underSettings = GlobalPoint(x: 400, y: 300)
+        let covered = WindowSnapshot(windows: [Sample.overlay, settings, Sample.a])
+        let onlyOverlay = WindowSnapshot(windows: [Sample.overlay, Sample.a])
+        #expect(!Visibility.isVisible(underSettings, surface: .window(Sample.a.id), pid: Sample.appA, in: covered, selfPID: Sample.me))
+        #expect(Visibility.isVisible(underSettings, surface: .window(Sample.a.id), pid: Sample.appA, in: onlyOverlay, selfPID: Sample.me))
+        #expect(Visibility.isVisible(underSettings, surface: .window(settings.id), pid: Sample.me, in: covered, selfPID: Sample.me))
+        let insideSettings = GlobalRect(x: 350, y: 200, width: 100, height: 50)
+        #expect(Visibility.coverTest(surface: .window(Sample.a.id), pid: Sample.appA, in: covered, selfPID: Sample.me)(insideSettings))
+        #expect(!Visibility.coverTest(surface: .window(Sample.a.id), pid: Sample.appA, in: onlyOverlay, selfPID: Sample.me)(insideSettings))
+    }
+
+    @Test func aWindowEntirelyBehindOursIsNotPlanned() {
+        let settings = Sample.w(50, Sample.me, "EverythingShortcut", layer: 0, 0, 0, 1512, 982)
+        let snapshot = WindowSnapshot(windows: [Sample.overlay, settings, Sample.c])
+        let running = RunningApps(frontmost: Sample.me, dock: Sample.dock, controlCenter: Sample.controlCenter, mayOwnStatusItems: [])
+        let plan = ScanPlan.make(snapshot: snapshot, displays: Sample.displays, running: running, selfPID: Sample.me)
+        #expect(plan.apps.map(\.pid) == [Sample.me])
     }
 
     @Test func onlyAppsWithNothingButExtrasAreExtrasOnly() {
