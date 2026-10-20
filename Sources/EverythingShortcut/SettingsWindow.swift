@@ -207,6 +207,8 @@ struct SettingsView: View {
                 Text("Badges are spelled with these letters. Fewer letters make longer badges to type. The first letters start the most badges, so put the easiest keys first.")
                     .foregroundStyle(.secondary)
                     .font(.callout)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)
