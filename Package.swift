@@ -14,7 +14,7 @@ let package = Package(
         // Live desktop reads with no AX, shared so the app and es-dev see the same window stack.
         .target(name: "Desktop", dependencies: ["HintCore"]),
         .target(name: "AutomationWire"),
-        // The hint badge's look and the app icon drawn from it, shared so es-dev renders the bundle's icon.
+        // The hint badge's look and the icons drawn from it, shared so es-dev renders the bundle's icon.
         .target(name: "Badge"),
         .executableTarget(
             name: "EverythingShortcut",

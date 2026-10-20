@@ -603,7 +603,8 @@ private struct MenuBarRow: View {
             }
             Group {
                 if visible {
-                    Text("Everything Shortcut lives in the menu bar as \(Image(systemName: "keyboard")). Opening the app again also brings you here.")
+                    // Text sets the 18 pt image on the baseline with its label mid-box, so 4 pt lower centers the label on the capitals.
+                    Text("Everything Shortcut lives in the menu bar as \(Text(Image(nsImage: .statusItemIcon).renderingMode(.template)).baselineOffset(-4)). Opening the app again also brings you here.")
                 } else {
                     Text("The menu bar is full, so macOS hides the icon. Open Everything Shortcut again, from Spotlight for example, to come back here.")
                 }

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Badge
 import HintCore
 #if DEBUG
 import AutomationWire
@@ -66,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func makeStatusItem() -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "Everything Shortcut")
+        item.button?.image = .statusItemIcon
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self

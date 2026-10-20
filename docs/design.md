@@ -34,7 +34,7 @@ Hint mode does not start while a password field holds Secure Event Input, becaus
 It beeps and shows a short notice near the top of the screen instead.
 It also does not start before Accessibility is allowed, and the app window opens at its Accessibility step instead.
 
-The keyboard icon in the menu bar opens a menu.
+The menu bar icon, a filled label with "ES" cut out, opens a menu.
 The first line says "Accessibility: allowed", or is "Allow Accessibility…", which opens the app window at that step.
 The second shows the shortcut and whether it registered.
 If another app already holds the chord, the menu says so, and "Show Labels" is still there.
@@ -169,7 +169,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/HintCore/BadgeLayout.swift` | `BadgeLayout.layout(board, displays)` into display-local badges. |
 | `Sources/Desktop/Desktop.swift` | Window snapshot, displays, and running apps from CoreGraphics and NSWorkspace, with no AX. |
 | `Sources/AutomationWire/AutomationWire.swift` | DEBUG wire types shared by the app and es-dev. |
-| `Sources/Badge/Badge.swift` | `BadgeStyle` (the hint badge's font, colors, padding, corner radius, and gradient) and `AppIcon`, the badge drawn as an "ES" keycap with ⌘. |
+| `Sources/Badge/Badge.swift` | `BadgeStyle` (the hint badge's font, colors, padding, corner radius, and gradient), `AppIcon` (the badge as an "ES" keycap with ⌘), and `NSImage.statusItemIcon` (the badge as a menu bar template with "ES" cut out). |
 | `Sources/EverythingShortcut/HintController.swift` | The single owner of session state, and the one read of Secure Event Input. |
 | `Sources/EverythingShortcut/Scan.swift` | `Scanner`, `ProbeQueues`, `AppProbe`, `ElementRef`, `AXReader`, and every AX IPC call. |
 | `Sources/EverythingShortcut/KeyCapture.swift` | The event tap and its C callback. |

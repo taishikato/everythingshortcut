@@ -56,7 +56,7 @@ Its window lists three steps, and every step your Mac already satisfies is check
 Press Return for Done, or click Skip Setup at any time.
 After that, the window opens at launch only while Accessibility is off.
 The window is also Settings.
-Choose Settings… from the ⌨ icon in the menu bar, or open the app again, to come back.
+Choose Settings… from the "ES" icon in the menu bar, or open the app again, to come back.
 If the menu bar is full, macOS hides the icon, and opening the app again is the way back.
 
 The bundle id and the signing identity stay the same on every build, so the grant survives rebuilds.

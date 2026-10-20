@@ -61,3 +61,24 @@ public struct AppIcon: View {
     private static let keycapBorder = Color(red: 0.54, green: 0.37, blue: 0.08)
     private static let faceHighlight = Color(red: 1.0, green: 0.98, blue: 0.79).opacity(0.7)
 }
+
+extension NSImage {
+    /// The badge as the status item's 18-point template: a filled label with "ES" cut out, so the menu
+    /// bar shows through the letters. Coordinates are from the top-left, as in the approved sketch.
+    @MainActor public static let statusItemIcon: NSImage = {
+        // AppKit may draw the image on any thread, so the handler must not inherit the main actor.
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { @Sendable _ in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.addPath(CGPath(roundedRect: CGRect(x: 0.5, y: 2.5, width: 17, height: 13), cornerWidth: 3.4, cornerHeight: 3.4, transform: nil))
+            context.fillPath()
+            context.setBlendMode(.destinationOut)
+            let letters = NSAttributedString(string: "ES", attributes: [.font: NSFont.systemFont(ofSize: 8, weight: .heavy)])
+            let size = letters.size()
+            letters.draw(at: NSPoint(x: 9 - size.width / 2, y: 9.3 - size.height / 2))
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Everything Shortcut"
+        return image
+    }()
+}
