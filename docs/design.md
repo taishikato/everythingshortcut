@@ -44,7 +44,8 @@ Opening the app again while it runs also shows the window, because macOS hides s
 Click the trigger button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
-The status line under it says whether the chord registered, or which chord another app holds.
+The status line under it says whether the chord registered, says "Paused while recording" while the recorder listens, and says when an enabled macOS shortcut takes the chord first.
+An error line takes no space while it is empty, and the window resizes to fit.
 The labels field takes two or more distinct letters, and uppercase input is lowercased.
 Its error line updates on every keystroke, and the alphabet applies on Return or when the field loses focus.
 "Restore Defaults" brings back ⇧⌘Space and the home-row alphabet.
@@ -412,6 +413,9 @@ Registration does not see other processes, so "Registered" can be wrong.
 On macOS 26.6.2, a second process holding ⌃⌥⌘K with `kEventHotKeyExclusive` left our registration of ⌃⌥⌘K at `noErr`, Settings showed "Registered", and a posted ⌃⌥⌘K reached only the other process.
 Without the exclusive flag both registrations succeeded and our app received the chord.
 The recorder does not see such a chord either: with the same holder running, a posted ⌃⌥⌘K left it at "Type a shortcut…" with nothing applied.
+macOS shortcuts are the one conflict the app can see, through `CopySymbolicHotKeys`.
+The recorder cannot catch them, because macOS handles an enabled one first: a posted ⌘Space opened Spotlight and a posted ⌥⌘Space opened a Finder search, and neither reached the recorder.
+So the menu and Settings check the applied chord against the enabled macOS shortcuts and say "not usable" when one takes it, which covers a chord saved before the user turned that shortcut on.
 
 The user picks the trigger in Settings, and `HotKey.validated` decides which chords are allowed.
 `KeyRouting.route` passes the trigger through before anything else, so a chord needs Control, Option or Command.
@@ -471,7 +475,10 @@ Verification has five layers, and only the last needs a person once.
    The app's DEBUG hook posts real keystrokes with `CGEventPost(.cghidEventTap)`, so they pass through Carbon hotkey matching and our own session tap.
    The hook never sends a key, trigger or mouse event to the reducer, so a passing run exercises the real hotkey, tap, scan and press path.
    Its one direct call is `configure`, which applies settings without persisting them, so a run never rewrites the user's saved settings.
-   The last check switches to ⌃⌥⌘J and the alphabet "qwertyuiop", proves the old chord no longer starts a session and the new one shows only labels from the new letters, then restores the settings the run started with, on the failure path too.
+   Before anything else, es-dev stops with exit 2 when the screen is locked or the fixture windows are not on screen after 2 s, which a full-screen Space causes, because every fixture check would then fail for a reason outside the app.
+   One check switches to ⌃⌥⌘J and the alphabet "qwertyuiop", proves the old chord no longer starts a session and the new one shows only labels from the new letters, then restores the settings the run started with, on the failure path too.
+   The last check relaunches the app with stored settings in the argument domain, which UserDefaults reads before the user's own and never writes.
+   The stored trigger is ⌃⌥⌘J and the stored alphabet "a1" is invalid, so the check proves the parse at launch and that only the invalid field falls back, then relaunches the app plainly.
    Beyond the fixture, it requires at least one `statusItem`, `menuBar` or `dock` hint whenever the live window stack exposes a status-level, main-menu or Dock window, so the run also proves the surfaces outside the fixture.
    es-dev prints `VERIFIED` or `NOT VERIFIED` for each check and saves a `screencapture -x` of the badges under `build/e2e/`.
 5. The one manual step is granting Accessibility to `build/EverythingShortcut.app`.

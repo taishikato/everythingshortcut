@@ -1,6 +1,5 @@
 import AppKit
 import ApplicationServices
-import Carbon
 import HintCore
 #if DEBUG
 import AutomationWire
@@ -60,14 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(info(AXIsProcessTrusted() ? "Accessibility: granted" : "Accessibility: not granted"))
         menu.addItem(action("Open Accessibility Settings…", #selector(openAccessibilitySettings)))
         menu.addItem(.separator())
-        switch controller.triggerRegistration {
-        case .registered:
-            menu.addItem(info("Trigger \(chord): registered"))
-        case .failed(let status) where status == eventHotKeyExistsErr:
-            menu.addItem(info("Trigger \(chord): not registered, another app holds it"))
-        case .failed(let status):
-            menu.addItem(info("Trigger \(chord): not registered (error \(status))"))
-        }
+        menu.addItem(info("Trigger \(chord): \(HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger))"))
         menu.addItem(action("Show hints", #selector(showHints)))
         menu.addItem(.separator())
         menu.addItem(action("Settings…", #selector(openSettings), key: ","))

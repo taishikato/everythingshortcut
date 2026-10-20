@@ -1,5 +1,4 @@
 import AppKit
-import Carbon
 import HintCore
 
 /// The one Settings window: the trigger chord and the label alphabet.
@@ -20,6 +19,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
     private let triggerError = NSTextField(labelWithString: "")
     private let alphabetField = NSTextField(string: "")
     private let alphabetError = NSTextField(labelWithString: "")
+    private let grid = NSGridView()
     /// Non-nil exactly while a chord is being recorded.
     private var recordingMonitor: Any?
 
@@ -39,14 +39,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
         let restore = NSButton(title: "Restore Defaults", target: self, action: #selector(restoreDefaults))
 
         let empty = NSGridCell.emptyContentView
-        let grid = NSGridView(views: [
+        for row in [
             [NSTextField(labelWithString: "Trigger:"), recorder],
             [empty, triggerStatus],
             [empty, triggerError],
             [NSTextField(labelWithString: "Labels:"), alphabetField],
             [empty, alphabetError],
             [empty, restore],
-        ])
+        ] { grid.addRow(with: row) }
         grid.rowAlignment = .firstBaseline
         grid.column(at: 0).xPlacement = .trailing
         grid.row(at: 5).topPadding = 8
@@ -62,6 +62,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
             alphabetField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
         ])
         window.contentView = content
+        show("", in: triggerError)
         refresh()
         window.center()
     }
@@ -83,18 +84,30 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
 
     private func showAlphabet(_ alphabet: Alphabet) {
         alphabetField.stringValue = alphabet.string
-        alphabetError.stringValue = ""
+        show("", in: alphabetError)
     }
 
     /// Leaves the alphabet field alone, so starting or stopping a recording keeps an unfinished edit.
     private func refreshTrigger() {
         let chord = layout.name(of: controller.settings.trigger)
         recorder.title = isRecording ? "Type a shortcut…" : chord
-        triggerStatus.stringValue = switch controller.triggerRegistration {
-        case .registered: "Registered"
-        case .failed(let status) where status == eventHotKeyExistsErr: "Not registered, another app holds \(chord)"
-        case .failed(let status): "Not registered (error \(status))"
-        }
+        let status = isRecording
+            ? "paused while recording"
+            : HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger)
+        triggerStatus.stringValue = status.prefix(1).uppercased() + status.dropFirst()
+    }
+
+    /// An error row takes no space while it is empty, so the window has no gaps between rows.
+    private func show(_ message: String, in label: NSTextField) {
+        label.stringValue = message
+        grid.cell(for: label)?.row?.isHidden = message.isEmpty
+        fitWindow()
+    }
+
+    private func fitWindow() {
+        guard let content = window.contentView else { return }
+        content.layoutSubtreeIfNeeded()
+        window.setContentSize(content.fittingSize)
     }
 
     private func apply(_ settings: UserSettings) {
@@ -117,7 +130,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
 
     private func startRecording() {
         controller.suspendTrigger()
-        triggerError.stringValue = ""
+        show("", in: triggerError)
         recordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let keyCode = event.keyCode
             let modifiers = Modifiers(event.modifierFlags)
@@ -138,7 +151,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
         }
         switch HotKey.validated(keyCode: keyCode, modifiers: modifiers) {
         case .failure(let error):
-            triggerError.stringValue = error.message
+            show(error.message, in: triggerError)
         case .success(let trigger):
             stopRecording()
             apply(UserSettings(trigger: trigger, alphabet: controller.settings.alphabet))
@@ -150,7 +163,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
         guard let recordingMonitor else { return }
         NSEvent.removeMonitor(recordingMonitor)
         self.recordingMonitor = nil
-        triggerError.stringValue = ""
+        show("", in: triggerError)
         controller.resumeTrigger()
         refreshTrigger()
     }
@@ -165,10 +178,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
     }
 
     func controlTextDidChange(_ notification: Notification) {
-        alphabetError.stringValue = switch Alphabet.parse(alphabetField.stringValue) {
+        let message = switch Alphabet.parse(alphabetField.stringValue) {
         case .success: ""
         case .failure(let error): error.message
         }
+        show(message, in: alphabetError)
     }
 
     /// Return, Tab, a click elsewhere, or closing the window. Invalid text stays for the user to fix.
