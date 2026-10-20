@@ -351,6 +351,12 @@ final class SettingsModel {
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
+    #if DEBUG
+    /// The hosting view's own space. `.global` on macOS starts at the top of the window frame, title bar
+    /// included, which put the recorded target 28 pt below the button (measured against its AX frame).
+    nonisolated static let rootSpace = "settingsRoot"
+    #endif
+
     var body: some View {
         VStack(spacing: 0) {
             form
@@ -368,6 +374,9 @@ struct SettingsView: View {
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .tint(accent)
+        #if DEBUG
+        .coordinateSpace(.named(SettingsView.rootSpace))
+        #endif
     }
 
     private var form: some View {
@@ -547,7 +556,7 @@ private struct PracticeStepRow: View {
                 .controlSize(.large)
                 .disabled(practice == .succeeded)
                 #if DEBUG
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.practiceTargetFrame = $0 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(SettingsView.rootSpace)) } action: { model.practiceTargetFrame = $0 }
                 #endif
                 .padding(.vertical, 6)
                 Text(status(practice))
