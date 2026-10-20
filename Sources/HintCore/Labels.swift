@@ -1,6 +1,6 @@
 /// The characters labels are built from.
 /// Invariant: two or more distinct lowercase ASCII letters, in priority order.
-/// Earlier characters appear in the shortest labels.
+/// Earlier characters start the most labels. When labels must grow, the earliest characters become prefixes first, so the single-character labels that remain are the last ones.
 public struct Alphabet: Hashable, Sendable {
     public let characters: [Character]
 

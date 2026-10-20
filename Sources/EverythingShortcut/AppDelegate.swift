@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(info(AXIsProcessTrusted() ? "Accessibility: granted" : "Accessibility: not granted"))
         menu.addItem(action("Open Accessibility Settings…", #selector(openAccessibilitySettings)))
         menu.addItem(.separator())
-        menu.addItem(info("Trigger \(chord): \(HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger))"))
+        menu.addItem(info("Trigger \(chord): \(HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger).text)"))
         menu.addItem(action("Show hints", #selector(showHints)))
         menu.addItem(.separator())
         menu.addItem(action("Settings…", #selector(openSettings), key: ","))

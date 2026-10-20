@@ -16,13 +16,13 @@ final class HotKeyCenter {
 
     var onPress: () -> Void = {}
 
-    /// What the menu and Settings say about the trigger, in lowercase so either can lead with it.
-    static func status(_ registration: Registration, for hotKey: HotKey) -> String {
-        if SystemShortcuts.enabled().contains(hotKey) { return "not usable, a macOS shortcut takes it first" }
+    /// What the menu and Settings say about the trigger. `text` is lowercase so either can lead with it.
+    static func status(_ registration: Registration, for hotKey: HotKey) -> (text: String, works: Bool) {
+        if SystemShortcuts.enabled().contains(hotKey) { return ("not usable, a macOS shortcut takes it first", false) }
         return switch registration {
-        case .registered: "registered"
-        case .failed(let status) where status == eventHotKeyExistsErr: "not registered, the chord is already registered"
-        case .failed(let status): "not registered (error \(status))"
+        case .registered: ("registered", true)
+        case .failed(let status) where status == eventHotKeyExistsErr: ("not registered, the chord is already registered", false)
+        case .failed(let status): ("not registered (error \(status))", false)
         }
     }
     private var hotKeyRef: EventHotKeyRef?

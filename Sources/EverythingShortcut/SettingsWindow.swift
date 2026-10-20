@@ -1,137 +1,110 @@
 import AppKit
 import HintCore
+import SwiftUI
 
-/// The one Settings window: the trigger chord and the label alphabet.
-/// Every change goes through `apply`, which persists it and hands it to the reducer. The reducer decides
-/// when it takes effect, and `refresh` redraws from the controller's applied settings once it has.
+/// The one Settings window: the shortcut that shows hints, and the letters badges are spelled with.
+/// AppKit owns the window, because the app is `.accessory` and opens it from the status menu.
+/// SwiftUI draws the grouped form inside it.
 @MainActor
-final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
-    private let controller: HintController
-    private let layout = KeyboardLayout()
-    private let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 440, height: 200),
-        styleMask: [.titled, .closable],
-        backing: .buffered,
-        defer: false
-    )
-    private let recorder = NSButton(title: "", target: nil, action: nil)
-    private let triggerStatus = NSTextField(labelWithString: "")
-    private let triggerError = NSTextField(labelWithString: "")
-    private let alphabetField = NSTextField(string: "")
-    private let alphabetError = NSTextField(labelWithString: "")
-    private let grid = NSGridView()
-    /// Non-nil exactly while a chord is being recorded.
-    private var recordingMonitor: Any?
+final class SettingsWindowController: NSObject, NSWindowDelegate {
+    private let model: SettingsModel
+    private let window: NSWindow
 
     init(controller: HintController) {
-        self.controller = controller
+        model = SettingsModel(controller: controller)
+        let hosting = NSHostingController(rootView: SettingsView(model: model))
+        hosting.sizingOptions = .preferredContentSize
+        window = NSWindow(contentViewController: hosting)
         super.init()
-        window.title = "Everything Shortcut Settings"
+        window.title = "Everything Shortcut"
+        window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.delegate = self
-
-        recorder.target = self
-        recorder.action = #selector(toggleRecording)
-        alphabetField.delegate = self
-        triggerStatus.textColor = .secondaryLabelColor
-        triggerError.textColor = .systemRed
-        alphabetError.textColor = .systemRed
-        let restore = NSButton(title: "Restore Defaults", target: self, action: #selector(restoreDefaults))
-
-        let empty = NSGridCell.emptyContentView
-        for row in [
-            [NSTextField(labelWithString: "Trigger:"), recorder],
-            [empty, triggerStatus],
-            [empty, triggerError],
-            [NSTextField(labelWithString: "Labels:"), alphabetField],
-            [empty, alphabetError],
-            [empty, restore],
-        ] { grid.addRow(with: row) }
-        grid.rowAlignment = .firstBaseline
-        grid.column(at: 0).xPlacement = .trailing
-        grid.row(at: 5).topPadding = 8
-        grid.translatesAutoresizingMaskIntoConstraints = false
-
-        let content = NSView()
-        content.addSubview(grid)
-        NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            grid.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
-            grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            grid.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            alphabetField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
-        ])
-        window.contentView = content
-        show("", in: triggerError)
-        refresh()
         window.center()
     }
 
     /// The app is `.accessory`, so the window only takes keys after the app activates.
     func show() {
-        refresh()
+        model.refresh()
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
 
-    /// Redraws from the applied settings. Called on show and after every apply.
-    /// An alphabet edit in progress is kept, so recording a chord mid-edit does not discard it.
+    func refresh() { model.refresh() }
+
+    func windowDidResignKey(_ notification: Notification) { model.stopRecording() }
+
+    func windowWillClose(_ notification: Notification) {
+        model.stopRecording()
+        model.commitLetters()
+    }
+}
+
+/// Settings state. Every change goes through `apply`, which persists it and hands it to the reducer.
+/// The reducer decides when it takes effect, and `refresh` redraws from the applied settings once it has.
+@MainActor
+@Observable
+final class SettingsModel {
+    /// Badges in the preview when no scan has run yet. Real desktops measured 160 to 185.
+    static let typicalBadgeCount = 150
+
+    private(set) var chord = ""
+    private(set) var status = (text: "", works: true)
+    private(set) var triggerError = ""
+    private(set) var isRecording = false
+    var letters = ""
+
+    @ObservationIgnored private let controller: HintController
+    @ObservationIgnored private let layout = KeyboardLayout()
+    @ObservationIgnored private var monitor: Any?
+
+    init(controller: HintController) {
+        self.controller = controller
+        refresh()
+    }
+
+    /// The letters as typed, parsed. The preview and the error line both read it, so they never disagree.
+    var parsedLetters: Result<Alphabet, AlphabetError> { Alphabet.parse(letters) }
+
+    /// The last scan's badge count, so the preview matches what the user just saw.
+    var previewCount: Int { controller.lastScanStats?.candidates ?? Self.typicalBadgeCount }
+
+    /// The applied alphabet the field last showed. While the field still shows it, the field follows
+    /// the applied settings. Once the user edits it, the edit stays, so recording a shortcut mid-edit
+    /// does not discard it.
+    @ObservationIgnored private var shownAlphabet = ""
+
     func refresh() {
-        refreshTrigger()
-        guard alphabetField.currentEditor() == nil else { return }
-        showAlphabet(controller.settings.alphabet)
+        chord = layout.name(of: controller.settings.trigger)
+        let current = HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger)
+        status = isRecording ? ("paused while you type a new shortcut", true) : current
+        let applied = controller.settings.alphabet.string
+        if letters == shownAlphabet { letters = applied }
+        shownAlphabet = applied
     }
 
-    private func showAlphabet(_ alphabet: Alphabet) {
-        alphabetField.stringValue = alphabet.string
-        show("", in: alphabetError)
+    func commitLetters() {
+        guard case .success(let alphabet) = parsedLetters else { return }
+        letters = alphabet.string
+        let next = UserSettings(trigger: controller.settings.trigger, alphabet: alphabet)
+        if next != controller.settings { apply(next) }
     }
 
-    /// Leaves the alphabet field alone, so starting or stopping a recording keeps an unfinished edit.
-    private func refreshTrigger() {
-        let chord = layout.name(of: controller.settings.trigger)
-        recorder.title = isRecording ? "Type a shortcut…" : chord
-        let status = isRecording
-            ? "paused while recording"
-            : HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger)
-        triggerStatus.stringValue = status.prefix(1).uppercased() + status.dropFirst()
-    }
-
-    /// An error row takes no space while it is empty, so the window has no gaps between rows.
-    private func show(_ message: String, in label: NSTextField) {
-        label.stringValue = message
-        grid.cell(for: label)?.row?.isHidden = message.isEmpty
-        fitWindow()
-    }
-
-    private func fitWindow() {
-        guard let content = window.contentView else { return }
-        content.layoutSubtreeIfNeeded()
-        window.setContentSize(content.fittingSize)
-    }
-
-    private func apply(_ settings: UserSettings) {
-        SettingsStore.save(settings)
-        controller.configure(settings)
-    }
-
-    @objc private func restoreDefaults() {
+    func restoreDefaults() {
         stopRecording()
-        alphabetField.abortEditing()
-        showAlphabet(UserSettings.standard.alphabet)
+        letters = shownAlphabet
         apply(.standard)
     }
 
-    private var isRecording: Bool { recordingMonitor != nil }
-
-    @objc private func toggleRecording() {
+    func toggleRecording() {
         if isRecording { stopRecording() } else { startRecording() }
     }
 
     private func startRecording() {
         controller.suspendTrigger()
-        show("", in: triggerError)
-        recordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        triggerError = ""
+        isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let keyCode = event.keyCode
             let modifiers = Modifiers(event.modifierFlags)
             let consumed = MainActor.assumeIsolated { () -> Bool in
@@ -141,7 +114,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
             }
             return consumed ? nil : event
         }
-        refreshTrigger()
+        refresh()
     }
 
     private func record(keyCode: UInt16, modifiers: Modifiers) {
@@ -151,7 +124,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
         }
         switch HotKey.validated(keyCode: keyCode, modifiers: modifiers) {
         case .failure(let error):
-            show(error.message, in: triggerError)
+            triggerError = error.message
         case .success(let trigger):
             stopRecording()
             apply(UserSettings(trigger: trigger, alphabet: controller.settings.alphabet))
@@ -159,38 +132,123 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
     }
 
     /// Idempotent. Always gives the applied chord back to Carbon, so no path leaves the trigger suspended.
-    private func stopRecording() {
-        guard let recordingMonitor else { return }
-        NSEvent.removeMonitor(recordingMonitor)
-        self.recordingMonitor = nil
-        show("", in: triggerError)
+    func stopRecording() {
+        guard let monitor else { return }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+        isRecording = false
+        triggerError = ""
         controller.resumeTrigger()
-        refreshTrigger()
+        refresh()
     }
 
-    func windowDidResignKey(_ notification: Notification) {
-        stopRecording()
+    private func apply(_ settings: UserSettings) {
+        SettingsStore.save(settings)
+        controller.configure(settings)
     }
+}
 
-    func windowWillClose(_ notification: Notification) {
-        stopRecording()
-        window.makeFirstResponder(nil)
-    }
+struct SettingsView: View {
+    @Bindable var model: SettingsModel
+    @FocusState private var lettersFocused: Bool
 
-    func controlTextDidChange(_ notification: Notification) {
-        let message = switch Alphabet.parse(alphabetField.stringValue) {
-        case .success: ""
-        case .failure(let error): error.message
+    var body: some View {
+        VStack(spacing: 0) {
+            form
+            HStack {
+                Spacer()
+                Button("Restore Defaults", action: model.restoreDefaults)
+            }
+            .padding([.horizontal, .bottom], 20)
         }
-        show(message, in: alphabetError)
+        .frame(width: 460)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Return, Tab, a click elsewhere, or closing the window. Invalid text stays for the user to fix.
-    func controlTextDidEndEditing(_ notification: Notification) {
-        guard case .success(let alphabet) = Alphabet.parse(alphabetField.stringValue) else { return }
-        alphabetField.stringValue = alphabet.string
-        let next = UserSettings(trigger: controller.settings.trigger, alphabet: alphabet)
-        if next != controller.settings { apply(next) }
+    private var form: some View {
+        Form {
+            Section {
+                LabeledContent("Show hints") {
+                    Button(action: model.toggleRecording) {
+                        Text(model.isRecording ? "Type a shortcut…" : model.chord)
+                            .font(.system(.body, design: .rounded).weight(.medium))
+                            .frame(minWidth: 120)
+                    }
+                    .controlSize(.large)
+                    .buttonStyle(.bordered)
+                    .tint(model.isRecording ? .accentColor : nil)
+                }
+                if !model.triggerError.isEmpty {
+                    Text(model.triggerError).foregroundStyle(.red).font(.callout)
+                }
+            } header: {
+                Text("Shortcut")
+            } footer: {
+                Label(model.status.text.prefix(1).uppercased() + model.status.text.dropFirst(),
+                      systemImage: model.status.works ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(model.status.works ? Color.secondary : Color.orange)
+                    .font(.callout)
+            }
+
+            Section {
+                TextField("Letters", text: $model.letters)
+                    .labelsHidden()
+                    .font(.system(.body, design: .monospaced))
+                    .focused($lettersFocused)
+                    .onSubmit(model.commitLetters)
+                    .onChange(of: lettersFocused) { _, focused in if !focused { model.commitLetters() } }
+                switch model.parsedLetters {
+                case .success(let alphabet): BadgePreview(alphabet: alphabet, count: model.previewCount)
+                case .failure(let error): Text(error.message).foregroundStyle(.red).font(.callout)
+                }
+            } header: {
+                Text("Badge letters")
+            } footer: {
+                Text("Badges are spelled with these letters. Fewer letters make longer badges to type. The first letters start the most badges, so put the easiest keys first.")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollDisabled(true)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The badges this alphabet would draw on a screen with `count` clickable things, in the overlay's style.
+struct BadgePreview: View {
+    let alphabet: Alphabet
+    let count: Int
+
+    var body: some View {
+        let labels = LabelGenerator.labels(count: count, alphabet: alphabet)
+        let longest = labels.map(\.count).max() ?? 0
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                ForEach(Array(labels.prefix(5).enumerated()), id: \.offset) { Badge(text: $0.element) }
+                Text("…").foregroundStyle(.secondary)
+                ForEach(Array(labels.suffix(3).enumerated()), id: \.offset) { Badge(text: $0.element) }
+            }
+            Text("With \(count) badges on screen, the longest takes \(longest) \(longest == 1 ? "key" : "keys") to type.")
+                .foregroundStyle(longest > 2 ? Color.orange : Color.secondary)
+                .font(.callout)
+        }
+    }
+}
+
+private struct Badge: View {
+    let text: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: BadgeStyle.cornerRadius)
+        Text(text.uppercased())
+            .font(Font(BadgeStyle.font))
+            .foregroundStyle(Color(nsColor: BadgeStyle.text))
+            .padding(.horizontal, BadgeStyle.padding.width)
+            .padding(.vertical, BadgeStyle.padding.height)
+            .background(LinearGradient(colors: [Color(nsColor: BadgeStyle.fillTop), Color(nsColor: BadgeStyle.fillBottom)], startPoint: .top, endPoint: .bottom), in: shape)
+            .overlay(shape.stroke(Color(nsColor: BadgeStyle.border)))
+            .shadow(color: Color(nsColor: BadgeStyle.shadow), radius: 1.5, y: 1)
     }
 }
 

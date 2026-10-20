@@ -45,9 +45,11 @@ Click the trigger button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
 The status line under it says whether the chord registered, says "Paused while recording" while the recorder listens, and says when an enabled macOS shortcut takes the chord first.
-An error line takes no space while it is empty, and the window resizes to fit.
-The labels field takes two or more distinct letters, and uppercase input is lowercased.
-Its error line updates on every keystroke, and the alphabet applies on Return or when the field loses focus.
+The "Badge letters" field sets the letters every badge is spelled with.
+It takes two or more distinct letters, and uppercase input is lowercased.
+Fewer letters make longer badges, so with the 3 letters "tai" a 180-badge screen needs 5 keys for most badges, while the default 14 letters need 2.
+Under the field, a preview draws the badges this alphabet would give the last scan's badge count, in the overlay's yellow style, and says how many keys the longest one takes.
+The preview and the error line both read the text as typed, and the alphabet applies on Return, when the field loses focus, or when the window closes.
 "Restore Defaults" brings back ⇧⌘Space and the home-row alphabet.
 Changes persist in `UserDefaults` and take effect without a restart, but never in the middle of a hint session.
 
@@ -167,7 +169,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/EverythingShortcut/HotKey.swift` | Carbon `RegisterEventHotKey` and `UnregisterEventHotKey`. |
 | `Sources/EverythingShortcut/KeyboardLayout.swift` | Key code to character through the ASCII-capable layout, and the name every chord is shown with. |
 | `Sources/EverythingShortcut/SettingsStore.swift` | `UserSettings` in `UserDefaults.standard`, read through `StoredSettings`. |
-| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController`, the trigger recorder and the alphabet field. |
+| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController` (the AppKit window), `SettingsModel` (state, recorder, apply), and the SwiftUI grouped form with `BadgePreview`. |
 | `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, `BadgeStyle`. |
 | `Sources/EverythingShortcut/Automation.swift` | The `#if DEBUG` hook that posts real keystrokes and writes `SessionSnapshot`. |
 | `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the trust prompt, and the status item menu. |
