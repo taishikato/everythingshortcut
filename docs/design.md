@@ -664,7 +664,7 @@ Candidate B became the base, 27 points to 23, and the cross-judge and the orches
 - We accept Vimium's mixed-length labels, so a 100-hint screen has 7 one-letter labels and 93 two-letter labels.
 - We accept one window that is both setup and Settings, with a title that changes after the first close.
   In exchange there is one activation-policy owner, one recorder, and one place that always says what needs the user.
-- We accept scanning our own window on the main thread, about 27 ms per scan while it is open.
+- We accept scanning our own window on the main thread, 7 to 13 ms per scan in the e2e runs, while it is open.
   In exchange the try has a real target, our own controls get labels, and badges for apps behind the window no longer draw over it.
 - We accept no labels on our own menu bar and status item, in exchange for never running a menu's tracking loop inside a press on main.
 - We accept that closing the window counts as skipping, and that a quit before closing shows setup again.
