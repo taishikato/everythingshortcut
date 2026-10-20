@@ -34,7 +34,7 @@ public enum AutomationCommand: Codable, Hashable, Sendable {
     /// Post the inputs in order, then reply with the snapshot taken right after posting.
     case press([AutomationInput])
     /// Apply these settings through the reducer without persisting them. Rejected, not defaulted, when invalid.
-    case configure(triggerKeyCode: UInt16, triggerModifiers: UInt8, alphabet: String)
+    case configure(triggerKeyCode: UInt16, triggerModifiers: UInt8)
 }
 
 public struct AutomationRequest: Codable, Hashable, Sendable {
@@ -192,13 +192,12 @@ public struct SessionSnapshot: Codable, Hashable, Sendable {
     public let overlayPanels: [RectDump]
     public let accessibilityTrusted: Bool
     public let triggerRegistered: Bool
-    /// The applied trigger and alphabet. A configure sent mid-session shows here once the session ends.
+    /// The applied trigger. A configure sent mid-session shows here once the session ends.
     public let trigger: TriggerDump
-    public let alphabet: String
     public let lastScan: ScanDump?
     public let lastPerform: PerformDump?
 
-    public init(phase: String, typed: String, hints: [HintDump], overlayPanels: [RectDump], accessibilityTrusted: Bool, triggerRegistered: Bool, trigger: TriggerDump, alphabet: String, lastScan: ScanDump?, lastPerform: PerformDump?) {
+    public init(phase: String, typed: String, hints: [HintDump], overlayPanels: [RectDump], accessibilityTrusted: Bool, triggerRegistered: Bool, trigger: TriggerDump, lastScan: ScanDump?, lastPerform: PerformDump?) {
         self.phase = phase
         self.typed = typed
         self.hints = hints
@@ -206,7 +205,6 @@ public struct SessionSnapshot: Codable, Hashable, Sendable {
         self.accessibilityTrusted = accessibilityTrusted
         self.triggerRegistered = triggerRegistered
         self.trigger = trigger
-        self.alphabet = alphabet
         self.lastScan = lastScan
         self.lastPerform = lastPerform
     }

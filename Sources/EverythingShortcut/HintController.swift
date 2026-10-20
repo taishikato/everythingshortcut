@@ -37,7 +37,7 @@ final class HintController {
 
     init(config: HintConfig) {
         self.config = config
-        machine = HintMachine(settings: config.settings)
+        machine = HintMachine(alphabet: config.alphabet)
         keys = KeyCapture(trigger: config.trigger, alphabet: config.alphabet)
         scanner = Scanner(config: config)
         let hotKey = HotKeyCenter()
@@ -129,7 +129,6 @@ final class HintController {
         case .applySettings(let settings):
             triggerRegistration = hotKey.register(settings.trigger)
             keys.trigger = settings.trigger
-            keys.alphabet = settings.alphabet
             config = config.applying(settings)
             onSettingsApplied()
         }

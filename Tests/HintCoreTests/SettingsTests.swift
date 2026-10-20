@@ -1,32 +1,6 @@
 import Testing
 @testable import HintCore
 
-struct AlphabetParseTests {
-    @Test func uppercaseInputIsAcceptedAsLowercase() throws {
-        #expect(try Alphabet.parse("ASDF").get().string == "asdf")
-    }
-
-    @Test func eachRejectionNamesItsReason() {
-        #expect(Alphabet.parse("") == .failure(.tooShort))
-        #expect(Alphabet.parse("a") == .failure(.tooShort))
-        #expect(Alphabet.parse("a1") == .failure(.notALetter("1")))
-        #expect(Alphabet.parse("a b") == .failure(.notALetter(" ")))
-        #expect(Alphabet.parse("aé") == .failure(.notALetter("é")))
-        #expect(Alphabet.parse("abA") == .failure(.repeated("a")))
-    }
-
-    @Test func messagesAreShortSentences() {
-        #expect(AlphabetError.tooShort.message == "Use at least two letters.")
-        #expect(AlphabetError.notALetter("1").message == "'1' is not a letter a-z.")
-        #expect(AlphabetError.repeated("a").message == "'a' appears twice.")
-    }
-
-    @Test func strictInitializerStillRejectsUppercase() {
-        #expect(Alphabet("aB") == nil)
-        #expect(Alphabet("ab")?.string == "ab")
-    }
-}
-
 struct TriggerValidationTests {
     @Test func aChordNeedsCommandControlOrOption() {
         #expect(HotKey.validated(keyCode: 38, modifiers: []) == .failure(.needsModifier))
@@ -71,49 +45,41 @@ struct KeyNameTests {
 }
 
 struct UserSettingsTests {
-    private let custom = UserSettings(trigger: HotKey(keyCode: 38, modifiers: [.control, .option, .command]), alphabet: Alphabet("qwertyuiop")!)
+    private let custom = UserSettings(trigger: HotKey(keyCode: 38, modifiers: [.control, .option, .command]))
 
-    private func stored(_ code: Int?, _ mods: Int?, _ alphabet: String?) -> StoredSettings {
-        StoredSettings(triggerKeyCode: code, triggerModifiers: mods, alphabet: alphabet)
+    private func stored(_ code: Int?, _ mods: Int?) -> StoredSettings {
+        StoredSettings(triggerKeyCode: code, triggerModifiers: mods)
     }
 
     @Test func standardMatchesTheStandardConfig() {
-        #expect(UserSettings.standard == UserSettings(trigger: HintConfig.standard.trigger, alphabet: HintConfig.standard.alphabet))
+        #expect(UserSettings.standard == UserSettings(trigger: HintConfig.standard.trigger))
     }
 
     @Test func storedFormRoundTrips() {
         #expect(UserSettings(stored: custom.stored) == custom)
         #expect(UserSettings(stored: UserSettings.standard.stored) == .standard)
-        #expect(custom.stored == stored(38, 13, "qwertyuiop"))
+        #expect(custom.stored == stored(38, 13))
     }
 
     @Test func nothingStoredMeansStandard() {
-        #expect(UserSettings(stored: stored(nil, nil, nil)) == .standard)
+        #expect(UserSettings(stored: stored(nil, nil)) == .standard)
     }
 
-    @Test func aBadTriggerFallsBackAloneAndKeepsTheAlphabet() {
+    @Test func aBadTriggerFallsBackToStandard() {
         let cases: [(Int?, Int?)] = [
             (nil, 13), (38, nil), (-1, 13), (128, 13), (38, -1), (38, 16), (38, 256), (38, 0), (38, 2), (53, 1), (51, 1),
         ]
         for (code, mods) in cases {
-            let parsed = UserSettings(stored: stored(code, mods, "qwertyuiop"))
+            let parsed = UserSettings(stored: stored(code, mods))
             #expect(parsed.trigger == UserSettings.standard.trigger, "code \(String(describing: code)) mods \(String(describing: mods))")
-            #expect(parsed.alphabet == custom.alphabet)
         }
     }
 
-    @Test func aBadAlphabetFallsBackAloneAndKeepsTheTrigger() {
-        for alphabet in ["", "q", "qq", "q1"] {
-            let parsed = UserSettings(stored: stored(38, 13, alphabet))
-            #expect(parsed.alphabet == UserSettings.standard.alphabet, "alphabet '\(alphabet)'")
-            #expect(parsed.trigger == custom.trigger)
-        }
-        #expect(UserSettings(stored: stored(38, 13, "QWE")).alphabet.string == "qwe")
-    }
 
     @Test func applyingReplacesOnlyTheUserSettings() {
         let config = HintConfig.standard.applying(custom)
         #expect(config.settings == custom)
+        #expect(config.alphabet == HintConfig.standard.alphabet)
         #expect(config.scanBudget == HintConfig.standard.scanBudget)
         #expect(config.clickPolicy == HintConfig.standard.clickPolicy)
     }

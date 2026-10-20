@@ -4,48 +4,20 @@
 public struct Alphabet: Hashable, Sendable {
     public let characters: [Character]
 
-    private init(checked characters: [Character]) { self.characters = characters }
-
-    /// Returns nil unless `string` already satisfies the invariant, so "aB" is nil here
-    /// although `parse` accepts it as "ab".
+    /// Returns nil unless `string` is two or more distinct lowercase ASCII letters.
     public init?(_ string: String) {
-        guard case .success(let parsed) = Self.parse(string), parsed.string == string else { return nil }
-        self = parsed
-    }
-
-    /// Parses user input. Lowercases first, so "ASDF" becomes "asdf".
-    public static func parse(_ input: String) -> Result<Alphabet, AlphabetError> {
-        let chars = Array(input.lowercased())
-        var seen = Set<Character>()
-        for c in chars {
-            guard c.isASCII, c.isLetter else { return .failure(.notALetter(c)) }
-            guard seen.insert(c).inserted else { return .failure(.repeated(c)) }
-        }
-        guard chars.count >= 2 else { return .failure(.tooShort) }
-        return .success(Alphabet(checked: chars))
+        let chars = Array(string)
+        guard chars.count >= 2,
+              Set(chars).count == chars.count,
+              chars.allSatisfy({ $0.isASCII && $0.isLowercase && $0.isLetter })
+        else { return nil }
+        characters = chars
     }
 
     /// Vimium's default order: home row first, then the easiest reaches.
     public static let homeRow = Alphabet("sadfjklewcmpgh")!
 
-    public var string: String { String(characters) }
-
     public func contains(_ c: Character) -> Bool { characters.contains(c) }
-}
-
-public enum AlphabetError: Error, Hashable, Sendable {
-    case tooShort
-    case notALetter(Character)
-    case repeated(Character)
-
-    /// One line for the inline error label in Settings.
-    public var message: String {
-        switch self {
-        case .tooShort: "Use at least two letters."
-        case .notALetter(let c): "'\(c)' is not a letter a-z."
-        case .repeated(let c): "'\(c)' appears twice."
-        }
-    }
 }
 
 public enum LabelGenerator {

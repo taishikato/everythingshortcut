@@ -49,7 +49,7 @@ final class AutomationServer {
         let error: String? = switch request.command {
         case .status: nil
         case .press(let inputs): post(inputs)
-        case .configure(let keyCode, let modifiers, let alphabet): configure(keyCode: keyCode, modifiers: modifiers, alphabet: alphabet)
+        case .configure(let keyCode, let modifiers): configure(keyCode: keyCode, modifiers: modifiers)
         }
         let reply = AutomationReply(id: request.id, error: error, snapshot: snapshot())
         do {
@@ -60,16 +60,11 @@ final class AutomationServer {
     }
 
     /// Validates like Settings does and never falls back, so a bad request fails loudly.
-    private func configure(keyCode: UInt16, modifiers: UInt8, alphabet: String) -> String? {
+    private func configure(keyCode: UInt16, modifiers: UInt8) -> String? {
         guard Modifiers.all.isSuperset(of: Modifiers(rawValue: modifiers)) else { return "unknown modifier bits \(modifiers)" }
-        let trigger: HotKey
         switch HotKey.validated(keyCode: keyCode, modifiers: Modifiers(rawValue: modifiers)) {
-        case .success(let valid): trigger = valid
-        case .failure(let error): return error.message
-        }
-        switch Alphabet.parse(alphabet) {
-        case .success(let valid):
-            controller.configure(UserSettings(trigger: trigger, alphabet: valid))
+        case .success(let trigger):
+            controller.configure(UserSettings(trigger: trigger))
             return nil
         case .failure(let error):
             return error.message
@@ -168,7 +163,6 @@ final class AutomationServer {
             accessibilityTrusted: AXIsProcessTrusted(),
             triggerRegistered: controller.triggerRegistration == .registered,
             trigger: TriggerDump(keyCode: controller.settings.trigger.keyCode, modifiers: controller.settings.trigger.modifiers.rawValue),
-            alphabet: controller.settings.alphabet.string,
             lastScan: controller.lastScanStats.map(Self.dump),
             lastPerform: controller.lastPerform.map(Self.dump)
         )

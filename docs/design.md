@@ -39,18 +39,16 @@ The second shows the trigger chord and whether it registered.
 If another app already holds the chord, the menu says so, and "Show hints" is still there.
 "Show hints" starts hint mode from the menu, "Settings…" opens the Settings window, and "Quit" ends the app.
 
-The Settings window changes the trigger chord and the label alphabet.
+The Settings window shows the app's name and version, the trigger chord, and a Status section.
+Status shows whether Accessibility is granted and whether the trigger works, each with a green or orange dot, and holds the "Launch at login" switch.
+The switch registers the app with `SMAppService.mainApp`, and when macOS waits for the user's approval it says so and offers to open Login Items.
 Opening the app again while it runs also shows the window, because macOS hides status items behind the notch when the menu bar is full.
 Click the trigger button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
-The status line under it says whether the chord registered, says "Paused while recording" while the recorder listens, and says when an enabled macOS shortcut takes the chord first.
-The "Badge letters" field sets the letters every badge is spelled with.
-It takes two or more distinct letters, and uppercase input is lowercased.
-Fewer letters make longer badges, so with the 3 letters "tai" a 180-badge screen needs 5 keys for most badges, while the default 14 letters need 2.
-Under the field, a preview draws the badges this alphabet would give the last scan's badge count, in the overlay's yellow style, and says how many keys the longest one takes.
-The preview and the error line both read the text as typed, and the alphabet applies on Return, when the field loses focus, or when the window closes.
-"Restore Defaults" brings back ⇧⌘Space and the home-row alphabet.
+The Shortcut status says whether the chord registered, says it is paused while the recorder listens, and says when an enabled macOS shortcut takes the chord first.
+"Restore Defaults" brings back ⇧⌘Space.
+The badge letters are fixed to the home-row alphabet, because a user-chosen alphabet rarely beats it and easily makes every badge longer.
 Changes persist in `UserDefaults` and take effect without a restart, but never in the middle of a hint session.
 
 ### The developer
@@ -96,7 +94,6 @@ controller.configure(settings)    // send(.configure(settings))
 case .applySettings(let settings):   // only ever emitted at idle
     triggerRegistration = hotKey.register(settings.trigger)
     keys.trigger = settings.trigger
-    keys.alphabet = settings.alphabet
     config = config.applying(settings)
     onSettingsApplied()
 ```
@@ -132,7 +129,7 @@ case .perform(let target):
     }
 ```
 
-The user edits the trigger and the alphabet in Settings.
+The user edits only the trigger in Settings.
 Every other tunable is one value in code.
 Choosing press or click is one word, and adding a hintable role is one line.
 
@@ -153,7 +150,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/HintCore/Geometry.swift` | `GlobalPoint`, `GlobalRect`, `AppKitRect`, the only AppKit conversion, `Display`, `LocalPoint`. |
 | `Sources/HintCore/Config.swift` | `HintConfig.standard`, the one source of tunables. |
 | `Sources/HintCore/Settings.swift` | `UserSettings`, `StoredSettings` and its per-field parse, `HintConfig.applying`. |
-| `Sources/HintCore/Labels.swift` | `Alphabet`, `Alphabet.parse` with `AlphabetError`, and `LabelGenerator.labels(count:alphabet:)`. |
+| `Sources/HintCore/Labels.swift` | `Alphabet` and `LabelGenerator.labels(count:alphabet:)`. |
 | `Sources/HintCore/Keys.swift` | `Modifiers`, `VirtualKey` and its key-name table, `HotKey`, `HotKey.validated` with `TriggerError`, `KeyInput`, `KeyRouting.route`. |
 | `Sources/HintCore/HintMachine.swift` | `Candidate`, `Hint`, `Board`, `Phase`, `Event`, `Effect`, and the `HintMachine` reducer. |
 | `Sources/HintCore/RoleTable.swift` | `RoleRule`, `ChildrenSource`, `RoleTable.standard`, and the web search keys. |
@@ -169,7 +166,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/EverythingShortcut/HotKey.swift` | Carbon `RegisterEventHotKey` and `UnregisterEventHotKey`. |
 | `Sources/EverythingShortcut/KeyboardLayout.swift` | Key code to character through the ASCII-capable layout, and the name every chord is shown with. |
 | `Sources/EverythingShortcut/SettingsStore.swift` | `UserSettings` in `UserDefaults.standard`, read through `StoredSettings`. |
-| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController` (the AppKit window), `SettingsModel` (state, recorder, apply), and the SwiftUI grouped form with `BadgePreview`. |
+| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController` (the AppKit window), `SettingsModel` (state, recorder, login item, apply), and the SwiftUI grouped form. |
 | `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, `BadgeStyle`. |
 | `Sources/EverythingShortcut/Automation.swift` | The `#if DEBUG` hook that posts real keystrokes and writes `SessionSnapshot`. |
 | `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the trust prompt, and the status item menu. |
@@ -200,10 +197,10 @@ Every core type is a value type and Sendable.
   No booleans sit beside it.
 - `Effect<Target>` is the full command set for the shell.
   It has `startScan`, `cancelScan`, `captureKeys`, `render`, `perform`, `alert`, and `applySettings`.
-- `UserSettings` is the trigger and the alphabet, the part of `HintConfig` the user edits.
-  `HintMachine` holds the applied value and at most one pending value, which waits for idle.
-- `StoredSettings` is the persisted form, three optional raw fields.
-  `UserSettings(stored:)` parses it field by field, so a bad trigger falls back to the standard trigger and keeps the user's alphabet.
+- `UserSettings` is the trigger, the part of `HintConfig` the user edits.
+  `HintMachine` holds at most one pending value, which waits for idle.
+- `StoredSettings` is the persisted form, two optional raw fields.
+  `UserSettings(stored:)` parses it, so a missing or invalid trigger falls back to the standard trigger.
 - `RoleTable` maps role strings to `.hint`, `.container(ChildrenSource, clips:)`, or `.skip`, plus a fallback.
 
 The core is generic over `Target`.
@@ -427,7 +424,7 @@ So the recorder suspends the trigger while it records, and every way out of reco
 
 A settings change is an event, `.configure`, and the reducer applies it only at idle.
 Mid-session it waits as pending, the last one wins, and every transition into idle emits `.applySettings` after its other effects.
-So the chord that ends a session is the one that started it, and the tap's alphabet always matches the labels on screen.
+So the chord that ends a session is the one that started it.
 The controller then registers the new chord, retunes `KeyCapture`, which is disabled at idle, and redraws the Settings window.
 
 Chords are shown through `KeyboardLayout.name(of:)`.
@@ -478,9 +475,9 @@ Verification has five layers, and only the last needs a person once.
    The hook never sends a key, trigger or mouse event to the reducer, so a passing run exercises the real hotkey, tap, scan and press path.
    Its one direct call is `configure`, which applies settings without persisting them, so a run never rewrites the user's saved settings.
    Before anything else, es-dev stops with exit 2 when the screen is locked or the fixture windows are not on screen after 2 s, which a full-screen Space causes, because every fixture check would then fail for a reason outside the app.
-   One check switches to ⌃⌥⌘J and the alphabet "qwertyuiop", proves the old chord no longer starts a session and the new one shows only labels from the new letters, then restores the settings the run started with, on the failure path too.
+   One check switches to ⌃⌥⌘J, proves the old chord no longer starts a session and the new one shows hints, then restores the settings the run started with, on the failure path too.
    The last check relaunches the app with stored settings in the argument domain, which UserDefaults reads before the user's own and never writes.
-   The stored trigger is ⌃⌥⌘J and the stored alphabet "a1" is invalid, so the check proves the parse at launch and that only the invalid field falls back, then relaunches the app plainly.
+   The stored trigger is ⌃⌥⌘J, so the check proves the parse at launch, then relaunches the app plainly.
    Beyond the fixture, it requires at least one `statusItem`, `menuBar` or `dock` hint whenever the live window stack exposes a status-level, main-menu or Dock window, so the run also proves the surfaces outside the fixture.
    es-dev prints `VERIFIED` or `NOT VERIFIED` for each check and saves a `screencapture -x` of the badges under `build/e2e/`.
 5. The one manual step is granting Accessibility to `build/EverythingShortcut.app`.

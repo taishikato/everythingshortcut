@@ -6,7 +6,7 @@ private func candidate(_ id: Int, x: Double, y: Double) -> Candidate<Int> {
 }
 
 private func showing(_ count: Int) -> HintMachine<Int> {
-    var m = HintMachine<Int>(settings: .standard)
+    var m = HintMachine<Int>(alphabet: .homeRow)
     _ = m.send(.trigger(.ready))
     _ = m.send(.scanned(ScanID(raw: 1), (0..<count).map { candidate($0, x: Double($0) * 30, y: 0) }))
     return m
@@ -19,19 +19,19 @@ private func board(_ m: HintMachine<Int>) -> Board<Int>? {
 
 struct HintMachineTests {
     @Test func triggerStartsOneScanAndCapturesKeys() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         #expect(m.send(.trigger(.ready)) == [.captureKeys(true), .startScan(ScanID(raw: 1))])
         #expect(m.phase == .scanning(ScanID(raw: 1)))
     }
 
     @Test func blockedTriggerAlertsAndStaysIdle() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         #expect(m.send(.trigger(.blocked(.secureInputActive))) == [.alert(.secureInputActive)])
         #expect(m.phase == .idle)
     }
 
     @Test func triggerWhileScanningCancelsAndStaleResultIsDropped() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         _ = m.send(.trigger(.ready))
         #expect(m.send(.trigger(.ready)) == [.cancelScan, .captureKeys(false)])
         #expect(m.send(.scanned(ScanID(raw: 1), [candidate(0, x: 0, y: 0)])) == [])
@@ -39,7 +39,7 @@ struct HintMachineTests {
     }
 
     @Test func rapidTriggersYieldExactlyOneLiveScan() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         var effects: [Effect<Int>] = []
         for _ in 0..<3 { effects += m.send(.trigger(.ready)) }
         #expect(effects.filter { if case .startScan = $0 { true } else { false } }.count == 2)
@@ -51,14 +51,14 @@ struct HintMachineTests {
     }
 
     @Test func emptyScanReturnsToIdle() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         _ = m.send(.trigger(.ready))
         #expect(m.send(.scanned(ScanID(raw: 1), [])) == [.captureKeys(false), .alert(.noHints)])
         #expect(m.phase == .idle)
     }
 
     @Test func readingOrderGetsShortestLabelsFirst() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         _ = m.send(.trigger(.ready))
         _ = m.send(.scanned(ScanID(raw: 1), [candidate(7, x: 50, y: 100), candidate(8, x: 200, y: 0), candidate(9, x: 10, y: 100)]))
         let labels = board(m)?.hints.map { "\($0.label)=\($0.candidate.target)" }
@@ -108,7 +108,7 @@ struct HintMachineTests {
     }
 
     @Test func mouseDownAnywhereCancelsWhileScanningOrShowing() {
-        var scanning = HintMachine<Int>(settings: .standard)
+        var scanning = HintMachine<Int>(alphabet: .homeRow)
         _ = scanning.send(.trigger(.ready))
         #expect(scanning.send(.mouseDown) == [.cancelScan, .captureKeys(false)])
         #expect(scanning.phase == .idle)
@@ -118,7 +118,7 @@ struct HintMachineTests {
     }
 
     @Test func mouseDownIsIgnoredWhenIdleOrPerforming() {
-        var idle = HintMachine<Int>(settings: .standard)
+        var idle = HintMachine<Int>(alphabet: .homeRow)
         #expect(idle.send(.mouseDown) == [])
         #expect(idle.phase == .idle)
         var performing = showing(3)
@@ -128,34 +128,31 @@ struct HintMachineTests {
     }
 
     @Test func lostKeyCaptureEndsTheSession() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         _ = m.send(.trigger(.ready))
         #expect(m.send(.keyCaptureLost) == [.cancelScan, .captureKeys(false), .alert(.keyCaptureLost)])
         var s = showing(2)
         #expect(s.send(.keyCaptureLost) == [.render(nil), .captureKeys(false), .alert(.keyCaptureLost)])
     }
 
-    private let custom = UserSettings(trigger: HotKey(keyCode: 38, modifiers: [.control, .option, .command]), alphabet: Alphabet("qwertyuiop")!)
+    private let custom = UserSettings(trigger: HotKey(keyCode: 38, modifiers: [.control, .option, .command]))
 
     @Test func configureWhileIdleAppliesAtOnceAndKeepsThePhase() {
-        var m = HintMachine<Int>(settings: .standard)
+        var m = HintMachine<Int>(alphabet: .homeRow)
         #expect(m.send(.configure(custom)) == [.applySettings(custom)])
         #expect(m.phase == .idle)
-        #expect(m.settings == custom)
     }
 
     @Test func configureWhileScanningWaitsForTheScanToEnd() {
-        var cancelled = HintMachine<Int>(settings: .standard)
+        var cancelled = HintMachine<Int>(alphabet: .homeRow)
         _ = cancelled.send(.trigger(.ready))
         #expect(cancelled.send(.configure(custom)) == [])
-        #expect(cancelled.settings == .standard)
         #expect(cancelled.send(.key(.escape)) == [.cancelScan, .captureKeys(false), .applySettings(custom)])
 
-        var empty = HintMachine<Int>(settings: .standard)
+        var empty = HintMachine<Int>(alphabet: .homeRow)
         _ = empty.send(.trigger(.ready))
         _ = empty.send(.configure(custom))
         #expect(empty.send(.scanned(ScanID(raw: 1), [])) == [.captureKeys(false), .alert(.noHints), .applySettings(custom)])
-        #expect(empty.settings == custom)
     }
 
     @Test func configureWhileShowingWaitsThroughTypingUntilTheSessionEnds() throws {
@@ -165,7 +162,6 @@ struct HintMachineTests {
         let effects = m.send(.key(.letter(first)))
         let narrowed = try #require(board(m))
         #expect(effects == [.render(narrowed)])
-        #expect(m.settings == .standard)
         #expect(m.send(.keyCaptureLost) == [.render(nil), .captureKeys(false), .alert(.keyCaptureLost), .applySettings(custom)])
     }
 
@@ -180,19 +176,10 @@ struct HintMachineTests {
 
     @Test func onlyTheLastPendingConfigureApplies() {
         var m = showing(3)
-        let other = UserSettings(trigger: .commandShiftSpace, alphabet: Alphabet("zx")!)
+        let other = UserSettings(trigger: .commandShiftSpace)
         _ = m.send(.configure(other))
         _ = m.send(.configure(custom))
         #expect(m.send(.key(.escape)) == [.render(nil), .captureKeys(false), .applySettings(custom)])
         #expect(m.send(.mouseDown) == [], "nothing stays pending once applied")
-    }
-
-    @Test func theNextScanLabelsWithTheNewAlphabet() {
-        var m = showing(3)
-        _ = m.send(.configure(custom))
-        _ = m.send(.key(.escape))
-        _ = m.send(.trigger(.ready))
-        _ = m.send(.scanned(ScanID(raw: 2), (0..<3).map { candidate($0, x: Double($0) * 30, y: 0) }))
-        #expect(board(m)?.hints.map(\.label) == ["q", "w", "e"])
     }
 }

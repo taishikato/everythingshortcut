@@ -110,27 +110,25 @@ public enum Effect<Target: Sendable>: Sendable {
 ///     scanning|showing keyCaptureLost -> idle             [cancelScan?, render(nil)?, captureKeys(false), alert]
 ///     idle        configure(s)       -> idle              [applySettings(s)]
 ///     other       configure(s)       -> unchanged         []                    (s waits as pending, the last one wins)
-///     any row that lands in idle with s pending           [..., applySettings(s)]  (labels of later scans use s)
+///     any row that lands in idle with s pending           [..., applySettings(s)]
 ///
-/// Settings never change mid-session, so the trigger that ends a session is the one that started it,
-/// and the tap's alphabet always matches the labels on screen.
+/// Settings never change mid-session, so the trigger that ends a session is the one that started it.
 /// Scan ids make stale results harmless. A cancelled scan's `scanned` event matches no state.
 /// A trigger or mouse-down while performing is ignored, so our own synthesized click cannot end it.
 /// Performing lasts one AX call plus at most one click.
 public struct HintMachine<Target: Sendable>: Sendable {
     public private(set) var phase: Phase<Target> = .idle
-    public private(set) var settings: UserSettings
+    private let alphabet: Alphabet
     /// Invariant: nil whenever `phase` is idle.
     private var pending: UserSettings?
     private var scansStarted: UInt64 = 0
 
-    public init(settings: UserSettings) { self.settings = settings }
+    public init(alphabet: Alphabet) { self.alphabet = alphabet }
 
     public mutating func send(_ event: Event<Target>) -> [Effect<Target>] {
         var effects = transition(event)
         if case .idle = phase, let next = pending {
             pending = nil
-            settings = next
             effects.append(.applySettings(next))
         }
         return effects
@@ -139,7 +137,6 @@ public struct HintMachine<Target: Sendable>: Sendable {
     private mutating func transition(_ event: Event<Target>) -> [Effect<Target>] {
         switch (phase, event) {
         case (.idle, .configure(let next)):
-            settings = next
             return [.applySettings(next)]
 
         case (_, .configure(let next)):
@@ -164,7 +161,7 @@ public struct HintMachine<Target: Sendable>: Sendable {
                 phase = .idle
                 return [.captureKeys(false), .alert(.noHints)]
             }
-            let board = Board(hints: Self.label(candidates, alphabet: settings.alphabet))
+            let board = Board(hints: Self.label(candidates, alphabet: alphabet))
             phase = .showing(board)
             return [.render(board)]
 

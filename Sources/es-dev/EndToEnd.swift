@@ -141,7 +141,7 @@ struct EndToEnd {
             try await checkSettingsChange(link: link, original: first)
         }
 
-        await log.step("a relaunch loads stored settings and replaces only the invalid one with its default") {
+        await log.step("a relaunch loads the stored trigger") {
             try await checkStoredSettingsLoad(link: link, original: first)
         }
 
@@ -150,29 +150,28 @@ struct EndToEnd {
         return log.verified == log.total ? 0 : 1
     }
 
-    /// Switches to a chord and alphabet nobody uses, then restores the settings the run started with,
+    /// Switches to a chord nobody uses, then restores the settings the run started with,
     /// on the failure path too, and proves the restored trigger shows hints again.
     private func checkSettingsChange(link: AppLink, original: SessionSnapshot) async throws -> (Bool, String) {
         let chord = TriggerDump(keyCode: 38, modifiers: Modifiers([.control, .option, .command]).rawValue)   // ⌃⌥⌘J
-        let alphabet = "qwertyuiop"
         let changed: (Bool, String)
         do {
-            changed = try await settingsChanged(to: chord, alphabet: alphabet, from: original, link: link)
+            changed = try await settingsChanged(to: chord, from: original, link: link)
         } catch {
             changed = (false, "\(error)")
             _ = try? await link.press([.escape], then: "idle")   // a configure sent mid-session would wait for idle
         }
-        _ = try await link.configure(original.trigger, alphabet: original.alphabet)
+        _ = try await link.configure(original.trigger)
         let restored = try await link.press([.trigger], then: "showing")
         _ = try await link.press([.escape], then: "idle")
-        let back = restored.trigger == original.trigger && restored.alphabet == original.alphabet && !restored.hints.isEmpty
-        return (changed.0 && back, "\(changed.1). restored: \(restored.hints.count) hints with the original trigger and alphabet \(restored.alphabet)")
+        let back = restored.trigger == original.trigger && !restored.hints.isEmpty
+        return (changed.0 && back, "\(changed.1). restored: \(restored.hints.count) hints with the original trigger")
     }
 
-    private func settingsChanged(to chord: TriggerDump, alphabet: String, from original: SessionSnapshot, link: AppLink) async throws -> (Bool, String) {
-        let configured = try await link.configure(chord, alphabet: alphabet)
-        guard configured.trigger == chord, configured.alphabet == alphabet else {
-            return (false, "the snapshot still has trigger \(configured.trigger) and alphabet \(configured.alphabet)")
+    private func settingsChanged(to chord: TriggerDump, from original: SessionSnapshot, link: AppLink) async throws -> (Bool, String) {
+        let configured = try await link.configure(chord)
+        guard configured.trigger == chord else {
+            return (false, "the snapshot still has trigger \(configured.trigger)")
         }
         _ = try await link.press([.chord(keyCode: original.trigger.keyCode, modifiers: original.trigger.modifiers)])
         try await Task.sleep(for: .milliseconds(300))
@@ -183,20 +182,17 @@ struct EndToEnd {
         }
         let shown = try await link.press([.trigger], then: "showing")
         _ = try await link.press([.escape], then: "idle")
-        let foreign = shown.hints.filter { !$0.label.allSatisfy(alphabet.contains) }.map(\.label)
-        return (!shown.hints.isEmpty && foreign.isEmpty, "old chord left the phase idle, new chord showed \(shown.hints.count) hints, labels outside '\(alphabet)': \(foreign)")
+        return (!shown.hints.isEmpty, "old chord left the phase idle, new chord showed \(shown.hints.count) hints")
     }
 
     /// Relaunches the app with stored settings in the argument domain, which UserDefaults reads before
     /// the user's own settings and never writes, so the run leaves the user's settings untouched.
-    /// The stored trigger is valid and the stored alphabet is not, so one launch proves the parse and the
-    /// per-field fallback. Values are XML plist fragments, because a bare "38" arrives as a string.
+    /// Values are XML plist fragments, because a bare "38" arrives as a string.
     private func checkStoredSettingsLoad(link: AppLink, original: SessionSnapshot) async throws -> (Bool, String) {
         let chord = TriggerDump(keyCode: 38, modifiers: Modifiers([.control, .option, .command]).rawValue)   // ⌃⌥⌘J
         let stored = [
             "-triggerKeyCode", "<integer>\(chord.keyCode)</integer>",
             "-triggerModifiers", "<integer>\(chord.modifiers)</integer>",
-            "-labelAlphabet", "a1",
         ]
         try await relaunchApp(arguments: [AutomationChannel.launchArgument] + stored)
         let loaded = try await link.waitForApp()
@@ -204,9 +200,8 @@ struct EndToEnd {
         _ = try await link.press([.escape], then: "idle")
         try await relaunchApp(arguments: [AutomationChannel.launchArgument])
         let back = try await link.waitForApp()
-        let ok = loaded.trigger == chord && loaded.alphabet == Alphabet.homeRow.string && !shown.hints.isEmpty
-            && back.trigger == original.trigger && back.alphabet == original.alphabet
-        return (ok, "loaded trigger \(loaded.trigger) and alphabet \(loaded.alphabet) from a stored 'a1', \(shown.hints.count) hints on the stored chord, plain relaunch back to \(back.trigger) and \(back.alphabet)")
+        let ok = loaded.trigger == chord && !shown.hints.isEmpty && back.trigger == original.trigger
+        return (ok, "loaded trigger \(loaded.trigger), \(shown.hints.count) hints on the stored chord, plain relaunch back to \(back.trigger)")
     }
 
     private struct RelaunchFailed: Error, CustomStringConvertible {
@@ -399,8 +394,8 @@ final class AppLink {
     }
 
     /// Applies settings in the app without persisting them, and returns the snapshot taken right after.
-    func configure(_ trigger: TriggerDump, alphabet: String) async throws -> SessionSnapshot {
-        let reply = try await send(.configure(triggerKeyCode: trigger.keyCode, triggerModifiers: trigger.modifiers, alphabet: alphabet))
+    func configure(_ trigger: TriggerDump) async throws -> SessionSnapshot {
+        let reply = try await send(.configure(triggerKeyCode: trigger.keyCode, triggerModifiers: trigger.modifiers))
         if let error = reply.error { throw Failure.rejected(error) }
         return reply.snapshot
     }

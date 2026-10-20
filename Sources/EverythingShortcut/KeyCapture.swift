@@ -19,7 +19,7 @@ final class KeyCapture {
     var onLost: () -> Void = {}
     /// Changed only at idle, when the tap is disabled, so a session never sees two values.
     var trigger: HotKey
-    var alphabet: Alphabet
+    private let alphabet: Alphabet
     private let layout = KeyboardLayout()
     private var port: CFMachPort?
     private var isActive = false

@@ -32,7 +32,7 @@ open build/EverythingShortcut.app
 
 The app lives in the menu bar and has no Dock icon.
 Its menu shows the Accessibility status, the trigger chord and whether it registered, "Show hints", "Settings…", and "Quit".
-Settings changes the trigger chord and the label letters, and a change takes effect without a restart.
+Settings changes the trigger chord, which takes effect without a restart, shows the Accessibility and trigger status, and turns Launch at login on or off.
 Opening the app again while it runs, for example with `open build/EverythingShortcut.app`, also shows Settings.
 That matters when macOS hides the status item behind the notch on a full menu bar.
 

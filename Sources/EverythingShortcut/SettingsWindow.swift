@@ -1,8 +1,10 @@
 import AppKit
+import ApplicationServices
 import HintCore
+import ServiceManagement
 import SwiftUI
 
-/// The one Settings window: the shortcut that shows hints, and the letters badges are spelled with.
+/// The one Settings window: the app card, the shortcut that shows hints, and the app's status.
 /// AppKit owns the window, because the app is `.accessory` and opens it from the status menu.
 /// SwiftUI draws the grouped form inside it.
 @MainActor
@@ -16,7 +18,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         hosting.sizingOptions = .preferredContentSize
         window = NSWindow(contentViewController: hosting)
         super.init()
-        window.title = "Everything Shortcut"
+        window.title = "Everything Shortcut Settings"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -32,67 +34,73 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func refresh() { model.refresh() }
 
+    /// Accessibility and Login Items change in System Settings, so coming back reads them again.
+    func windowDidBecomeKey(_ notification: Notification) { model.refresh() }
+
     func windowDidResignKey(_ notification: Notification) { model.stopRecording() }
 
-    func windowWillClose(_ notification: Notification) {
-        model.stopRecording()
-        model.commitLetters()
-    }
+    func windowWillClose(_ notification: Notification) { model.stopRecording() }
 }
 
-/// Settings state. Every change goes through `apply`, which persists it and hands it to the reducer.
+/// Settings state. A shortcut change goes through `apply`, which persists it and hands it to the reducer.
 /// The reducer decides when it takes effect, and `refresh` redraws from the applied settings once it has.
 @MainActor
 @Observable
 final class SettingsModel {
-    /// Badges in the preview when no scan has run yet. Real desktops measured 160 to 185.
-    static let typicalBadgeCount = 150
-
     private(set) var chord = ""
-    private(set) var status = (text: "", works: true)
+    private(set) var shortcut = (text: "", works: true)
     private(set) var triggerError = ""
     private(set) var isRecording = false
-    var letters = ""
+    private(set) var accessibilityGranted = false
+    private(set) var loginItem = SMAppService.Status.notRegistered
+    private(set) var loginItemError = ""
 
     @ObservationIgnored private let controller: HintController
     @ObservationIgnored private let layout = KeyboardLayout()
     @ObservationIgnored private var monitor: Any?
+
+    let version: String = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        return "Version \(short) (\(build))"
+    }()
 
     init(controller: HintController) {
         self.controller = controller
         refresh()
     }
 
-    /// The letters as typed, parsed. The preview and the error line both read it, so they never disagree.
-    var parsedLetters: Result<Alphabet, AlphabetError> { Alphabet.parse(letters) }
-
-    /// The last scan's badge count, so the preview matches what the user just saw.
-    var previewCount: Int { controller.lastScanStats?.candidates ?? Self.typicalBadgeCount }
-
-    /// The applied alphabet the field last showed. While the field still shows it, the field follows
-    /// the applied settings. Once the user edits it, the edit stays, so recording a shortcut mid-edit
-    /// does not discard it.
-    @ObservationIgnored private var shownAlphabet = ""
-
     func refresh() {
         chord = layout.name(of: controller.settings.trigger)
         let current = HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger)
-        status = isRecording ? ("paused while you type a new shortcut", true) : current
-        let applied = controller.settings.alphabet.string
-        if letters == shownAlphabet { letters = applied }
-        shownAlphabet = applied
+        shortcut = isRecording ? ("paused while you type a new shortcut", true) : current
+        accessibilityGranted = AXIsProcessTrusted()
+        loginItem = SMAppService.mainApp.status
     }
 
-    func commitLetters() {
-        guard case .success(let alphabet) = parsedLetters else { return }
-        letters = alphabet.string
-        let next = UserSettings(trigger: controller.settings.trigger, alphabet: alphabet)
-        if next != controller.settings { apply(next) }
+    /// On while macOS has the login item, including while it waits for the user's approval.
+    var launchesAtLogin: Bool {
+        get { loginItem == .enabled || loginItem == .requiresApproval }
+        set {
+            do {
+                if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                loginItemError = ""
+            } catch {
+                loginItemError = error.localizedDescription
+            }
+            refresh()
+        }
     }
+
+    func openAccessibilitySettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+
+    func openLoginItemsSettings() { SMAppService.openSystemSettingsLoginItems() }
 
     func restoreDefaults() {
         stopRecording()
-        letters = shownAlphabet
         apply(.standard)
     }
 
@@ -127,7 +135,7 @@ final class SettingsModel {
             triggerError = error.message
         case .success(let trigger):
             stopRecording()
-            apply(UserSettings(trigger: trigger, alphabet: controller.settings.alphabet))
+            apply(UserSettings(trigger: trigger))
         }
     }
 
@@ -148,9 +156,11 @@ final class SettingsModel {
     }
 }
 
+/// The badge's amber, so Settings carries the same tone as the hints on screen.
+@MainActor private var accent: Color { Color(nsColor: BadgeStyle.fillBottom) }
+
 struct SettingsView: View {
     @Bindable var model: SettingsModel
-    @FocusState private var lettersFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -161,96 +171,104 @@ struct SettingsView: View {
             }
             .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 460)
+        .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
+        .tint(accent)
     }
 
     private var form: some View {
         Form {
             Section {
-                LabeledContent("Show hints") {
+                HStack(spacing: 12) {
+                    AppIcon()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Everything Shortcut").font(.title3.weight(.semibold))
+                        Text("Click anything on screen from the keyboard.").foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(model.version).foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("Shortcut") {
+                LabeledContent {
                     Button(action: model.toggleRecording) {
                         Text(model.isRecording ? "Type a shortcut…" : model.chord)
-                            .font(.system(.body, design: .rounded).weight(.medium))
+                            .font(.body.weight(.medium))
                             .frame(minWidth: 120)
                     }
                     .controlSize(.large)
                     .buttonStyle(.bordered)
-                    .tint(model.isRecording ? .accentColor : nil)
+                    .tint(model.isRecording ? accent : nil)
+                } label: {
+                    Text("Show hints")
+                    Text("Click, then press the new shortcut. Escape cancels.")
                 }
                 if !model.triggerError.isEmpty {
-                    Text(model.triggerError).foregroundStyle(.red).font(.callout)
+                    Text(model.triggerError).foregroundStyle(.red)
                 }
-            } header: {
-                Text("Shortcut")
-            } footer: {
-                Label(model.status.text.prefix(1).uppercased() + model.status.text.dropFirst(),
-                      systemImage: model.status.works ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(model.status.works ? Color.secondary : Color.orange)
-                    .font(.callout)
             }
 
-            Section {
-                TextField("Letters", text: $model.letters)
-                    .labelsHidden()
-                    .font(.system(.body, design: .monospaced))
-                    .focused($lettersFocused)
-                    .onSubmit(model.commitLetters)
-                    .onChange(of: lettersFocused) { _, focused in if !focused { model.commitLetters() } }
-                switch model.parsedLetters {
-                case .success(let alphabet): BadgePreview(alphabet: alphabet, count: model.previewCount)
-                case .failure(let error): Text(error.message).foregroundStyle(.red).font(.callout)
+            Section("Status") {
+                LabeledContent("Accessibility") {
+                    if model.accessibilityGranted {
+                        StatusDot(text: "Granted", color: .green)
+                    } else {
+                        HStack {
+                            StatusDot(text: "Not granted", color: .orange)
+                            Button("Open Settings…", action: model.openAccessibilitySettings)
+                        }
+                    }
                 }
-            } header: {
-                Text("Badge letters")
-            } footer: {
-                Text("Badges are spelled with these letters. Fewer letters make longer badges to type. The first letters start the most badges, so put the easiest keys first.")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LabeledContent("Shortcut") {
+                    StatusDot(text: sentence(model.shortcut.text), color: model.isRecording ? .secondary : model.shortcut.works ? .green : .orange)
+                }
+                Toggle(isOn: $model.launchesAtLogin) {
+                    Text("Launch at login")
+                    if model.loginItem == .requiresApproval {
+                        Text("Waiting for approval in System Settings > Login Items.")
+                    }
+                }
+                .toggleStyle(.switch)
+                if model.loginItem == .requiresApproval {
+                    Button("Open Login Items…", action: model.openLoginItemsSettings)
+                }
+                if !model.loginItemError.isEmpty {
+                    Text(model.loginItemError).foregroundStyle(.red)
+                }
             }
         }
         .formStyle(.grouped)
         .scrollDisabled(true)
         .fixedSize(horizontal: false, vertical: true)
     }
+
+    private func sentence(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
 }
 
-/// The badges this alphabet would draw on a screen with `count` clickable things, in the overlay's style.
-struct BadgePreview: View {
-    let alphabet: Alphabet
-    let count: Int
+private struct StatusDot: View {
+    let text: String
+    let color: Color
 
     var body: some View {
-        let labels = LabelGenerator.labels(count: count, alphabet: alphabet)
-        let longest = labels.map(\.count).max() ?? 0
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                ForEach(Array(labels.prefix(5).enumerated()), id: \.offset) { Badge(text: $0.element) }
-                Text("…").foregroundStyle(.secondary)
-                ForEach(Array(labels.suffix(3).enumerated()), id: \.offset) { Badge(text: $0.element) }
-            }
-            Text("With \(count) badges on screen, the longest takes \(longest) \(longest == 1 ? "key" : "keys") to type.")
-                .foregroundStyle(longest > 2 ? Color.orange : Color.secondary)
-                .font(.callout)
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text).foregroundStyle(.secondary)
         }
     }
 }
 
-private struct Badge: View {
-    let text: String
-
+/// A yellow badge with a keyboard, drawn like the hints on screen. The app bundle has no icon file.
+private struct AppIcon: View {
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: BadgeStyle.cornerRadius)
-        Text(text.uppercased())
-            .font(Font(BadgeStyle.font))
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        Image(systemName: "keyboard")
+            .font(.system(size: 20, weight: .semibold))
             .foregroundStyle(Color(nsColor: BadgeStyle.text))
-            .padding(.horizontal, BadgeStyle.padding.width)
-            .padding(.vertical, BadgeStyle.padding.height)
+            .frame(width: 40, height: 40)
             .background(LinearGradient(colors: [Color(nsColor: BadgeStyle.fillTop), Color(nsColor: BadgeStyle.fillBottom)], startPoint: .top, endPoint: .bottom), in: shape)
-            .overlay(shape.stroke(Color(nsColor: BadgeStyle.border)))
-            .shadow(color: Color(nsColor: BadgeStyle.shadow), radius: 1.5, y: 1)
+            .overlay(shape.strokeBorder(Color(nsColor: BadgeStyle.border), lineWidth: 1))
     }
 }
 
