@@ -408,6 +408,10 @@ The trigger is a Carbon `RegisterEventHotKey` registration, which needs no permi
 Registration failure is a state, not a crash.
 `HotKeyCenter.register` returns `.registered` or `.failed(status)`, the controller keeps it, and the status menu and Settings show it.
 A chord that fails to register stays chosen and persisted, as at launch, and "Show hints" in the menu still works.
+Registration does not see other processes, so "Registered" can be wrong.
+On macOS 26.6.2, a second process holding ⌃⌥⌘K with `kEventHotKeyExclusive` left our registration of ⌃⌥⌘K at `noErr`, Settings showed "Registered", and a posted ⌃⌥⌘K reached only the other process.
+Without the exclusive flag both registrations succeeded and our app received the chord.
+The recorder does not see such a chord either: with the same holder running, a posted ⌃⌥⌘K left it at "Type a shortcut…" with nothing applied.
 
 The user picks the trigger in Settings, and `HotKey.validated` decides which chords are allowed.
 `KeyRouting.route` passes the trigger through before anything else, so a chord needs Control, Option or Command.
