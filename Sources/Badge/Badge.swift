@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// Vimium's badge look: a yellow gradient, a darker amber border, a light shadow, dark bold uppercase
 /// letters, and typed letters dimmed to the border's amber.
@@ -18,4 +19,45 @@ public enum BadgeStyle {
         colors: [fillTop.cgColor, fillBottom.cgColor] as CFArray,
         locations: [0, 1]
     )!
+}
+
+/// The hint badge as a keycap with ⌘ on it. Every measure is a fraction of the badge's side, taken
+/// from its top-left corner, as in the approved sketch.
+public struct AppIcon: View {
+    let size: CGFloat
+
+    public init(size: CGFloat) { self.size = size }
+
+    public var body: some View {
+        let s = size
+        let keycap = RoundedRectangle(cornerRadius: 0.225 * s, style: .continuous)
+        let face = RoundedRectangle(cornerRadius: 0.182 * s, style: .continuous)
+        ZStack(alignment: .topLeading) {
+            face
+                .fill(LinearGradient(colors: [Color(nsColor: BadgeStyle.fillTop), Color(nsColor: BadgeStyle.fillBottom)], startPoint: .top, endPoint: .bottom))
+                .overlay(face.strokeBorder(Self.faceHighlight, lineWidth: s / 137))
+                .frame(width: 0.883 * s, height: 0.825 * s)
+                .offset(x: 0.058 * s, y: 0.032 * s)
+            Text("ES")
+                .font(.system(size: 0.437 * s, weight: .heavy))
+                .kerning(-0.0073 * s)
+                .position(x: 0.5 * s, y: 0.473 * s)
+            // Below 32 points the ⌘ shrinks to a speck, so Finder's 16 and 32 point sizes leave it out.
+            if s >= 32 {
+                Text("⌘")
+                    .font(.system(size: 0.143 * s, weight: .semibold))
+                    .opacity(0.72)
+                    .position(x: 0.813 * s, y: 0.146 * s)
+            }
+        }
+        .foregroundStyle(Color(nsColor: BadgeStyle.text))
+        .frame(width: s, height: s)
+        .background(LinearGradient(colors: [Self.keycapTop, Self.keycapBottom], startPoint: .top, endPoint: .bottom), in: keycap)
+        .overlay(keycap.strokeBorder(Self.keycapBorder, lineWidth: max(1, s / 51)))
+    }
+
+    private static let keycapTop = Color(red: 0.90, green: 0.65, blue: 0.20)
+    private static let keycapBottom = Color(red: 0.70, green: 0.48, blue: 0.09)
+    private static let keycapBorder = Color(red: 0.54, green: 0.37, blue: 0.08)
+    private static let faceHighlight = Color(red: 1.0, green: 0.98, blue: 0.79).opacity(0.7)
 }

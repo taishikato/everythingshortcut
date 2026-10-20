@@ -618,21 +618,6 @@ private struct MenuBarRow: View {
     }
 }
 
-/// A yellow badge with a keyboard, drawn like the hints on screen. The app bundle has no icon file.
-private struct AppIcon: View {
-    let size: CGFloat
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-        Image(systemName: "keyboard")
-            .font(.system(size: size * 0.5, weight: .semibold))
-            .foregroundStyle(Color(nsColor: BadgeStyle.text))
-            .frame(width: size, height: size)
-            .background(LinearGradient(colors: [Color(nsColor: BadgeStyle.fillTop), Color(nsColor: BadgeStyle.fillBottom)], startPoint: .top, endPoint: .bottom), in: shape)
-            .overlay(shape.strokeBorder(Color(nsColor: BadgeStyle.border), lineWidth: max(1, size / 40)))
-    }
-}
-
 /// The badge on the Dock's 1024-point icon grid, which leaves a margin around the shape.
 private struct DockIcon: View {
     var body: some View { AppIcon(size: 824).frame(width: 1024, height: 1024) }

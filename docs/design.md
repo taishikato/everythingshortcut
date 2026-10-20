@@ -168,7 +168,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/HintCore/BadgeLayout.swift` | `BadgeLayout.layout(board, displays)` into display-local badges. |
 | `Sources/Desktop/Desktop.swift` | Window snapshot, displays, and running apps from CoreGraphics and NSWorkspace, with no AX. |
 | `Sources/AutomationWire/AutomationWire.swift` | DEBUG wire types shared by the app and es-dev. |
-| `Sources/Badge/Badge.swift` | `BadgeStyle`, the hint badge's font, colors, padding, corner radius, and gradient. |
+| `Sources/Badge/Badge.swift` | `BadgeStyle` (the hint badge's font, colors, padding, corner radius, and gradient) and `AppIcon`, the badge drawn as an "ES" keycap with ⌘. |
 | `Sources/EverythingShortcut/HintController.swift` | The single owner of session state, and the one read of Secure Event Input. |
 | `Sources/EverythingShortcut/Scan.swift` | `Scanner`, `ProbeQueues`, `AppProbe`, `ElementRef`, `AXReader`, and every AX IPC call. |
 | `Sources/EverythingShortcut/KeyCapture.swift` | The event tap and its C callback. |
