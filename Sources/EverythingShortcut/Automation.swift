@@ -9,26 +9,26 @@ import os
 /// DEBUG-only remote control for end-to-end tests from an untrusted shell.
 ///
 /// Compiled only in DEBUG and started only with `--automation`, so release builds carry none of it.
-/// It does two things and nothing else.
+/// It does three things and nothing else.
 /// - Posts real input with `CGEventPost(.cghidEventTap)`. This process is Accessibility-trusted,
 ///   so the events travel the physical path: Carbon hotkey matching, then our own session tap.
-///   The test never calls the reducer directly.
+///   Input never reaches the reducer any other way.
 /// - Writes `SessionSnapshot`, read from the controller's state. The hints in the snapshot are the
 ///   hints in `HintMachine.phase`, the single source the overlay also renders from.
+/// - Configures settings through `HintController.configure`, without persisting them, so a run never
+///   rewrites the user's saved settings.
 ///
 /// A `press` reply is written as soon as the events are posted. The resulting phase change happens on
 /// later run-loop turns, so the driver polls `status` until it sees the phase it expects.
 @MainActor
 final class AutomationServer {
     private let controller: HintController
-    private let trigger: HotKey
     private let layout = KeyboardLayout()
     private var observer: NSObjectProtocol?
     private let log = Logger(subsystem: "com.taishikato.EverythingShortcut", category: "automation")
 
-    init(controller: HintController, trigger: HotKey) {
+    init(controller: HintController) {
         self.controller = controller
-        self.trigger = trigger
     }
 
     func start() {
@@ -49,6 +49,7 @@ final class AutomationServer {
         let error: String? = switch request.command {
         case .status: nil
         case .press(let inputs): post(inputs)
+        case .configure(let keyCode, let modifiers, let alphabet): configure(keyCode: keyCode, modifiers: modifiers, alphabet: alphabet)
         }
         let reply = AutomationReply(id: request.id, error: error, snapshot: snapshot())
         do {
@@ -58,13 +59,33 @@ final class AutomationServer {
         }
     }
 
+    /// Validates like Settings does and never falls back, so a bad request fails loudly.
+    private func configure(keyCode: UInt16, modifiers: UInt8, alphabet: String) -> String? {
+        guard Modifiers.all.isSuperset(of: Modifiers(rawValue: modifiers)) else { return "unknown modifier bits \(modifiers)" }
+        let trigger: HotKey
+        switch HotKey.validated(keyCode: keyCode, modifiers: Modifiers(rawValue: modifiers)) {
+        case .success(let valid): trigger = valid
+        case .failure(let error): return error.message
+        }
+        switch Alphabet.parse(alphabet) {
+        case .success(let valid):
+            controller.configure(UserSettings(trigger: trigger, alphabet: valid))
+            return nil
+        case .failure(let error):
+            return error.message
+        }
+    }
+
     /// Resolves every key before posting any, so a request with an unknown letter posts nothing.
     private func post(_ inputs: [AutomationInput]) -> String? {
         var events: [() -> Void] = []
         for input in inputs {
             switch input {
             case .trigger:
-                events.append { self.chord(self.trigger) }
+                let trigger = controller.settings.trigger
+                events.append { self.chord(trigger) }
+            case .chord(let keyCode, let modifiers):
+                events.append { self.chord(HotKey(keyCode: keyCode, modifiers: Modifiers(rawValue: modifiers))) }
             case .escape:
                 events.append { self.key(VirtualKey.escape) }
             case .backspace:
@@ -146,6 +167,8 @@ final class AutomationServer {
             overlayPanels: controller.overlayPanelFrames.map { RectDump(x: $0.x, y: $0.y, width: $0.width, height: $0.height) },
             accessibilityTrusted: AXIsProcessTrusted(),
             triggerRegistered: controller.triggerRegistration == .registered,
+            trigger: TriggerDump(keyCode: controller.settings.trigger.keyCode, modifiers: controller.settings.trigger.modifiers.rawValue),
+            alphabet: controller.settings.alphabet.string,
             lastScan: controller.lastScanStats.map(Self.dump),
             lastPerform: controller.lastPerform.map(Self.dump)
         )

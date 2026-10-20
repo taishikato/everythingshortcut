@@ -24,6 +24,8 @@ public enum AutomationInput: Codable, Hashable, Sendable {
     case letters(String)
     /// A left click at a point in global display space.
     case click(x: Double, y: Double)
+    /// Any chord, posted like `trigger`. `modifiers` holds `HintCore.Modifiers` raw bits.
+    case chord(keyCode: UInt16, modifiers: UInt8)
 }
 
 public enum AutomationCommand: Codable, Hashable, Sendable {
@@ -31,6 +33,8 @@ public enum AutomationCommand: Codable, Hashable, Sendable {
     case status
     /// Post the inputs in order, then reply with the snapshot taken right after posting.
     case press([AutomationInput])
+    /// Apply these settings through the reducer without persisting them. Rejected, not defaulted, when invalid.
+    case configure(triggerKeyCode: UInt16, triggerModifiers: UInt8, alphabet: String)
 }
 
 public struct AutomationRequest: Codable, Hashable, Sendable {
@@ -167,6 +171,17 @@ public struct PerformDump: Codable, Hashable, Sendable {
     }
 }
 
+/// A chord as raw wire values. `modifiers` holds `HintCore.Modifiers` raw bits.
+public struct TriggerDump: Codable, Hashable, Sendable {
+    public let keyCode: UInt16
+    public let modifiers: UInt8
+
+    public init(keyCode: UInt16, modifiers: UInt8) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
+}
+
 public struct SessionSnapshot: Codable, Hashable, Sendable {
     /// "idle", "scanning", "showing" or "performing".
     public let phase: String
@@ -177,16 +192,21 @@ public struct SessionSnapshot: Codable, Hashable, Sendable {
     public let overlayPanels: [RectDump]
     public let accessibilityTrusted: Bool
     public let triggerRegistered: Bool
+    /// The applied trigger and alphabet. A configure sent mid-session shows here once the session ends.
+    public let trigger: TriggerDump
+    public let alphabet: String
     public let lastScan: ScanDump?
     public let lastPerform: PerformDump?
 
-    public init(phase: String, typed: String, hints: [HintDump], overlayPanels: [RectDump], accessibilityTrusted: Bool, triggerRegistered: Bool, lastScan: ScanDump?, lastPerform: PerformDump?) {
+    public init(phase: String, typed: String, hints: [HintDump], overlayPanels: [RectDump], accessibilityTrusted: Bool, triggerRegistered: Bool, trigger: TriggerDump, alphabet: String, lastScan: ScanDump?, lastPerform: PerformDump?) {
         self.phase = phase
         self.typed = typed
         self.hints = hints
         self.overlayPanels = overlayPanels
         self.accessibilityTrusted = accessibilityTrusted
         self.triggerRegistered = triggerRegistered
+        self.trigger = trigger
+        self.alphabet = alphabet
         self.lastScan = lastScan
         self.lastPerform = lastPerform
     }

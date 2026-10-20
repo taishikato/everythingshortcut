@@ -1,4 +1,5 @@
 import Carbon
+import HintCore
 
 /// Key code to character through the current ASCII-capable keyboard layout.
 /// Labels then type the same under Dvorak, or under a Japanese IME in kana mode, which reports the
@@ -9,6 +10,21 @@ final class KeyboardLayout {
     /// The unshifted character for `keyCode`, or nil for keys that produce none.
     func character(for keyCode: UInt16) -> Character? {
         withLayout { Self.translate(keyCode, in: $0) } ?? nil
+    }
+
+    /// The name a person reads for `keyCode`: the core's table for keys that type nothing printable,
+    /// else the layout's character uppercased as on the keycap, else "key N".
+    func keyName(for keyCode: UInt16) -> String {
+        if let name = VirtualKey.name(for: keyCode) { return name }
+        if let c = character(for: keyCode), !c.isWhitespace, !c.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
+            return c.uppercased()
+        }
+        return "key \(keyCode)"
+    }
+
+    /// Every chord the UI shows goes through here, so the menu and Settings name it the same way.
+    func name(of hotKey: HotKey) -> String {
+        hotKey.displayName(keyName: keyName(for: hotKey.keyCode))
     }
 
     /// Inverse of `character(for:)` over key codes 0..<128. DEBUG automation uses it to post real keys.
