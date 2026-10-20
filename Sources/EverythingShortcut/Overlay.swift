@@ -1,4 +1,5 @@
 import AppKit
+import Badge
 import CoreGraphics
 import Desktop
 import HintCore
@@ -233,24 +234,4 @@ final class BadgeCanvas: NSView {
 private struct LabelKey: Hashable {
     let text: String
     let typedCount: Int
-}
-
-/// Vimium's badge look: a yellow gradient, a darker amber border, a light shadow, dark bold uppercase
-/// letters, and typed letters dimmed to the border's amber.
-@MainActor
-enum BadgeStyle {
-    static let font = NSFont.boldSystemFont(ofSize: 11)
-    static let text = NSColor(srgbRed: 0.19, green: 0.15, blue: 0.02, alpha: 1)
-    static let typedText = NSColor(srgbRed: 0.83, green: 0.67, blue: 0.23, alpha: 1)
-    static let fillTop = NSColor(srgbRed: 1.0, green: 0.97, blue: 0.52, alpha: 1)
-    static let fillBottom = NSColor(srgbRed: 1.0, green: 0.77, blue: 0.26, alpha: 1)
-    static let border = NSColor(srgbRed: 0.76, green: 0.54, blue: 0.13, alpha: 1)
-    static let shadow = NSColor(white: 0, alpha: 0.3)
-    static let padding = NSSize(width: 3, height: 1)
-    static let cornerRadius: CGFloat = 3
-    static let gradient = CGGradient(
-        colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-        colors: [fillTop.cgColor, fillBottom.cgColor] as CFArray,
-        locations: [0, 1]
-    )!
 }

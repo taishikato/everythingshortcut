@@ -14,9 +14,10 @@ let package = Package(
         // Live desktop reads with no AX, shared so the app and es-dev see the same window stack.
         .target(name: "Desktop", dependencies: ["HintCore"]),
         .target(name: "AutomationWire"),
+        .target(name: "Badge"),
         .executableTarget(
             name: "EverythingShortcut",
-            dependencies: ["HintCore", "Desktop", "AutomationWire"],
+            dependencies: ["HintCore", "Desktop", "AutomationWire", "Badge"],
             linkerSettings: [.linkedFramework("Carbon"), .linkedFramework("ApplicationServices")]
         ),
         // Developer tool for an untrusted shell: the window dump, the fixture, and the e2e driver.

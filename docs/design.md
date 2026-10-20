@@ -153,7 +153,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 
 | Path | Owns |
 | --- | --- |
-| `Package.swift` | Six targets, tools 6.2, macOS 15, Swift 6 language mode. |
+| `Package.swift` | Seven targets, tools 6.2, macOS 15, Swift 6 language mode. |
 | `Sources/HintCore/Geometry.swift` | `GlobalPoint`, `GlobalRect`, `AppKitRect`, the only AppKit conversion, `Display`, `LocalPoint`. |
 | `Sources/HintCore/Config.swift` | `HintConfig.standard`, the one source of tunables. |
 | `Sources/HintCore/Settings.swift` | `UserSettings`, `StoredSettings` and its per-field parse, `HintConfig.applying`. |
@@ -168,6 +168,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/HintCore/BadgeLayout.swift` | `BadgeLayout.layout(board, displays)` into display-local badges. |
 | `Sources/Desktop/Desktop.swift` | Window snapshot, displays, and running apps from CoreGraphics and NSWorkspace, with no AX. |
 | `Sources/AutomationWire/AutomationWire.swift` | DEBUG wire types shared by the app and es-dev. |
+| `Sources/Badge/Badge.swift` | `BadgeStyle`, the hint badge's font, colors, padding, corner radius, and gradient. |
 | `Sources/EverythingShortcut/HintController.swift` | The single owner of session state, and the one read of Secure Event Input. |
 | `Sources/EverythingShortcut/Scan.swift` | `Scanner`, `ProbeQueues`, `AppProbe`, `ElementRef`, `AXReader`, and every AX IPC call. |
 | `Sources/EverythingShortcut/KeyCapture.swift` | The event tap and its C callback. |
@@ -175,7 +176,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/EverythingShortcut/KeyboardLayout.swift` | Key code to character through the ASCII-capable layout, and the name every chord is shown with. |
 | `Sources/EverythingShortcut/SettingsStore.swift` | `UserSettings` in `UserDefaults.standard`, read through `StoredSettings`, and the two setup flags. |
 | `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController` (the AppKit window, the trust watch, coming forward), `SettingsModel` (the guide, the one prompt call, recorder, login item, apply), and the SwiftUI checklist. |
-| `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, `BadgeStyle`, and the secure input `Notice`. |
+| `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, and the secure input `Notice`. |
 | `Sources/EverythingShortcut/Automation.swift` | The `#if DEBUG` hook that posts real keystrokes and writes `SessionSnapshot`. |
 | `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the launch decision, session note routing, and the status item menu. |
 | `Sources/es-dev/` | `windows`, `fixture` and `e2e`. |

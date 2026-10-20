@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Badge
 #if DEBUG
 import Desktop
 #endif
