@@ -40,13 +40,13 @@ If another app already holds the chord, the menu says so, and "Show hints" is st
 "Show hints" starts hint mode from the menu, "Settings…" opens the Settings window, and "Quit" ends the app.
 
 The Settings window shows the app's name and version, the trigger chord, and a Status section.
-Status shows whether Accessibility is granted and whether the trigger works, each with a green or orange dot, and holds the "Launch at login" switch.
+Status shows whether Accessibility is granted with a green or orange dot, and holds the "Launch at login" switch.
 The switch registers the app with `SMAppService.mainApp`, and when macOS waits for the user's approval it says so and offers to open Login Items.
 Opening the app again while it runs also shows the window, because macOS hides status items behind the notch when the menu bar is full.
 Click the trigger button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
-The Shortcut status says whether the chord registered, says it is paused while the recorder listens, and says when an enabled macOS shortcut takes the chord first.
+The chord is on the button, so the Shortcut row says nothing while it works, and shows an orange line only when the chord failed to register or an enabled macOS shortcut takes it first.
 "Restore Defaults" brings back ⇧⌘Space.
 The badge letters are fixed to the home-row alphabet, because a user-chosen alphabet rarely beats it and easily makes every badge longer.
 Changes persist in `UserDefaults` and take effect without a restart, but never in the middle of a hint session.

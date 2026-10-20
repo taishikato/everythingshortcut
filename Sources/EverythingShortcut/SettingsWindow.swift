@@ -73,8 +73,7 @@ final class SettingsModel {
 
     func refresh() {
         chord = layout.name(of: controller.settings.trigger)
-        let current = HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger)
-        shortcut = isRecording ? ("paused while you type a new shortcut", true) : current
+        shortcut = HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger)
         accessibilityGranted = AXIsProcessTrusted()
         loginItem = SMAppService.mainApp.status
     }
@@ -207,6 +206,8 @@ struct SettingsView: View {
                 }
                 if !model.triggerError.isEmpty {
                     Text(model.triggerError).foregroundStyle(.red)
+                } else if !model.isRecording && !model.shortcut.works {
+                    Label(sentence(model.shortcut.text), systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
             }
 
@@ -220,9 +221,6 @@ struct SettingsView: View {
                             Button("Open Settings…", action: model.openAccessibilitySettings)
                         }
                     }
-                }
-                LabeledContent("Shortcut") {
-                    StatusDot(text: sentence(model.shortcut.text), color: model.isRecording ? .secondary : model.shortcut.works ? .green : .orange)
                 }
                 Toggle(isOn: $model.launchesAtLogin) {
                     Text("Launch at login")
