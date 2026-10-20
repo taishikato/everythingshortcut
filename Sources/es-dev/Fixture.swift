@@ -57,6 +57,12 @@ final class Fixture: NSObject {
         NSApp.activate()
     }
 
+    /// The fixture floats, so it would cover the app window. Only the last e2e check calls this.
+    func hide() {
+        back.orderOut(nil)
+        front.orderOut(nil)
+    }
+
     /// Control frames in global display space, through the core's single AppKit conversion.
     func frame(of name: String) -> GlobalRect? {
         guard let view = controls[name], let window = view.window else { return nil }

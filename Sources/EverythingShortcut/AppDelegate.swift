@@ -38,7 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assert(CGWindowLevelForKey(.screenSaverWindow) == Int32(WindowLayer.overlay))
         assert(NSWindow.Level.screenSaver.rawValue == WindowLayer.overlay)
         if launchedForAutomation {
-            let server = AutomationServer(controller: controller)
+            let server = AutomationServer(controller: controller, practice: PracticeHook(
+                open: { [weak self] in self?.settingsWindowController()?.showPractice() },
+                dump: { [weak self] in self?.settingsWindow?.practiceDump }
+            ))
             server.start()
             automation = server
         }
@@ -117,10 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openSettings() {
-        guard let controller, let statusItem else { return }
+        settingsWindowController()?.show()
+    }
+
+    private func settingsWindowController() -> SettingsWindowController? {
+        guard let controller, let statusItem else { return nil }
         let window = settingsWindow ?? SettingsWindowController(controller: controller, statusItem: statusItem)
         settingsWindow = window
-        window.show()
+        return window
     }
 
     private func info(_ title: String) -> NSMenuItem {

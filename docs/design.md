@@ -557,8 +557,16 @@ Verification has five layers, and only the last needs a person once.
    Its one direct call is `configure`, which applies settings without persisting them, so a run never rewrites the user's saved settings.
    Before anything else, es-dev stops with exit 2 when the screen is locked or the fixture windows are not on screen after 2 s, which a full-screen Space causes, because every fixture check would then fail for a reason outside the app.
    One check switches to ⌃⌥⌘J, proves the old chord no longer starts a session and the new one shows hints, then restores the settings the run started with, on the failure path too.
-   The last check relaunches the app with stored settings in the argument domain, which UserDefaults reads before the user's own and never writes.
+   A later check relaunches the app with stored settings in the argument domain, which UserDefaults reads before the user's own and never writes.
    The stored trigger is ⌃⌥⌘J, so the check proves the parse at launch, then relaunches the app plainly.
+   A launch with `--automation` never opens the app window, so every check before the last one runs with no window of ours on screen.
+   The last check hides the fixture and opens the app window's try step through `openPractice`.
+   It waits until the snapshot has the try step ready, the Click Me frame and the app window's frame, and fails at once when the button lies outside the window, because then a frame conversion is wrong.
+   It then shows labels and types the one on Click Me, and passes when the try step reports success.
+   That proves the main-lane probe, an in-process `AXPress` on a SwiftUI button, and that the button's action ran while the controller was still performing.
+   It also requires that no label of another app's window behind ours, in a window list es-dev takes while the labels show, has its center inside our window.
+   Windows in front of ours are left out, so what happens to be on screen cannot make it flake.
+   The check never closes the window, because closing stores setup completion, and `scripts/e2e.sh` ends the app with `pkill`.
    Beyond the fixture, it requires at least one `statusItem`, `menuBar` or `dock` hint whenever the live window stack exposes a status-level, main-menu or Dock window, so the run also proves the surfaces outside the fixture.
    es-dev prints `VERIFIED` or `NOT VERIFIED` for each check and saves a `screencapture -x` of the badges under `build/e2e/`.
 5. The one manual step is granting Accessibility to `build/EverythingShortcut.app`.
@@ -654,6 +662,8 @@ Candidate B became the base, 27 points to 23, and the cross-judge and the orches
   In exchange the title and footer never change while the user reads them, and anything that still matters reopens the window by itself.
 - We accept a timed nudge for a chord another app holds, because nothing else can see one.
 - We accept that coming forward may not take focus, in exchange for not depending on activation that macOS may refuse.
+- We accept a success test for the try that relies on SwiftUI running the button's action inside `AXPress`, because the e2e check proves it on every run.
+- We accept that the e2e run leaves the app window open until the script ends the app, in exchange for never writing the user's settings.
 
 ## Alternatives considered
 

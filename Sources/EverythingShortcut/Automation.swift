@@ -6,6 +6,19 @@ import CoreGraphics
 import HintCore
 import os
 
+/// The app window's side of the automation hook. `dump` is nil while the window was never opened.
+struct PracticeHook {
+    let open: @MainActor () -> Void
+    let dump: @MainActor () -> PracticeDump?
+}
+
+/// The try step and where it is, in global display space.
+struct PracticeDump {
+    let practice: Practice
+    let target: GlobalRect?
+    let window: GlobalRect?
+}
+
 /// DEBUG-only remote control for end-to-end tests from an untrusted shell.
 ///
 /// Compiled only in DEBUG and started only with `--automation`, so release builds carry none of it.
@@ -16,19 +29,21 @@ import os
 /// - Writes `SessionSnapshot`, read from the controller's state. The hints in the snapshot are the
 ///   hints in `HintMachine.phase`, the single source the overlay also renders from.
 /// - Configures settings through `HintController.configure`, without persisting them, so a run never
-///   rewrites the user's saved settings.
+///   rewrites the user's saved settings, and opens the app window's try step, which it never closes.
 ///
 /// A `press` reply is written as soon as the events are posted. The resulting phase change happens on
 /// later run-loop turns, so the driver polls `status` until it sees the phase it expects.
 @MainActor
 final class AutomationServer {
     private let controller: HintController
+    private let practice: PracticeHook
     private let layout = KeyboardLayout()
     private var observer: NSObjectProtocol?
     private let log = Logger(subsystem: "com.taishikato.EverythingShortcut", category: "automation")
 
-    init(controller: HintController) {
+    init(controller: HintController, practice: PracticeHook) {
         self.controller = controller
+        self.practice = practice
     }
 
     func start() {
@@ -50,6 +65,7 @@ final class AutomationServer {
         case .status: nil
         case .press(let inputs): post(inputs)
         case .configure(let keyCode, let modifiers): configure(keyCode: keyCode, modifiers: modifiers)
+        case .openPractice: openPractice()
         }
         let reply = AutomationReply(id: request.id, error: error, snapshot: snapshot())
         do {
@@ -69,6 +85,11 @@ final class AutomationServer {
         case .failure(let error):
             return error.message
         }
+    }
+
+    private func openPractice() -> String? {
+        practice.open()
+        return nil
     }
 
     /// Resolves every key before posting any, so a request with an unknown letter posts nothing.
@@ -155,6 +176,7 @@ final class AutomationServer {
                 HintDump(label: h.label, pid: h.candidate.pid.raw, surface: Self.describe(h.candidate.surface), frame: Self.dump(h.candidate.frame))
             }
         }
+        let practiceState = practice.dump()
         return SessionSnapshot(
             phase: phaseName,
             typed: typed,
@@ -164,7 +186,10 @@ final class AutomationServer {
             triggerRegistered: controller.triggerRegistration == .registered,
             trigger: TriggerDump(keyCode: controller.settings.trigger.keyCode, modifiers: controller.settings.trigger.modifiers.rawValue),
             lastScan: controller.lastScanStats.map(Self.dump),
-            lastPerform: controller.lastPerform.map(Self.dump)
+            lastPerform: controller.lastPerform.map(Self.dump),
+            practice: practiceState.map { String(describing: $0.practice) },
+            practiceTarget: practiceState?.target.map(Self.dump),
+            appWindow: practiceState?.window.map(Self.dump)
         )
     }
 

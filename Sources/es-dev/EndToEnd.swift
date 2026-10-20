@@ -145,6 +145,10 @@ struct EndToEnd {
             try await checkStoredSettingsLoad(link: link, original: first)
         }
 
+        await log.step("a label in the app's own window presses its Click Me button, and windows behind it get no labels inside it") {
+            try await checkPractice(link: link)
+        }
+
         if let final = try? await link.status() { try? save(final, as: "final.json") }
         print("\(log.verified) of \(log.total) checks VERIFIED. Snapshots in \(outDirectory.path).")
         return log.verified == log.total ? 0 : 1
@@ -204,6 +208,56 @@ struct EndToEnd {
         return (ok, "loaded trigger \(loaded.trigger), \(shown.hints.count) hints on the stored chord, plain relaunch back to \(back.trigger)")
     }
 
+    /// Opens the app window's try step and types the label on its Click Me button. Success proves the
+    /// main-lane probe, an in-process `AXPress` on a SwiftUI button, and that the button's action ran while
+    /// the controller was still performing. It runs last and never closes the window, because closing it
+    /// stores setup completion, and the script's pkill ends the app.
+    private func checkPractice(link: AppLink) async throws -> (Bool, String) {
+        fixture.hide()
+        _ = try await link.send(.openPractice)
+        let opened = try await link.waitFor("the try step ready with its frames", timeout: .seconds(5)) {
+            $0.practice == "ready" && $0.practiceTarget != nil && $0.appWindow != nil
+        }
+        guard let target = opened.practiceTarget.map(Self.rect), let ours = opened.appWindow.map(Self.rect) else {
+            return (false, "the snapshot has no target or window frame")
+        }
+        guard ours.contains(target) else {
+            return (false, "the target \(target) is not inside the app window \(ours), so a frame conversion is wrong")
+        }
+
+        let shown = try await link.press([.trigger], then: "showing")
+        let stack = Desktop.windowSnapshot().windows
+        let app = appPID
+        guard let ourIndex = stack.firstIndex(where: { $0.owner == app && $0.layer < WindowLayer.dock && $0.bounds.contains(ours.center) }) else {
+            _ = try? await link.press([.escape], then: "idle")
+            return (false, "the app window is not in the window list")
+        }
+        let behind = Set(stack[(ourIndex + 1)...].map { "window:\($0.id.raw)" })
+        let considered = shown.hints.filter { $0.pid != app.raw && behind.contains($0.surface) }
+        let leaks = considered.filter { ours.contains(Self.rect($0.frame).center) }
+        let own = shown.hints.filter { $0.pid == app.raw }
+        guard let label = own.first(where: { target.contains(Self.rect($0.frame).center) })?.label else {
+            _ = try? await link.press([.escape], then: "idle")
+            return (false, "\(own.count) labels in the app's window, none on the target")
+        }
+
+        _ = try await link.press([.letters(label)])
+        let done = try await link.waitFor("the try step succeeded") { $0.practice == "succeeded" }
+        let scan = shown.lastScan?.apps.first { $0.pid == app.raw }
+        let detail = [
+            "\(own.count) labels in the app's window, label \(label) on the target",
+            "\(considered.count) labels of windows behind it, \(leaks.count) inside it\(leaks.isEmpty ? "" : ": \(leaks.map(\.label))")",
+            "app scan \(scan.map { "\(Int($0.durationMs)) ms, roots \($0.roots)" } ?? "-")",
+            "perform \(done.lastPerform.map { "\($0.plan), \($0.act)" } ?? "-")",
+            "practice \(done.practice ?? "-")",
+        ].joined(separator: ", ")
+        return (leaks.isEmpty, detail)
+    }
+
+    private static func rect(_ r: RectDump) -> GlobalRect {
+        GlobalRect(x: r.x, y: r.y, width: r.width, height: r.height)
+    }
+
     private struct RelaunchFailed: Error, CustomStringConvertible {
         let description: String
     }
@@ -256,7 +310,7 @@ struct EndToEnd {
                    "Back #\(backID.raw) listed: \(ids.contains(backID)), Front #\(frontID.raw) listed: \(ids.contains(frontID))")
     }
 
-    /// The app's pid, which its own scan never plans, so exposure is judged as the app judges it.
+    /// The app's pid, so exposure is judged as the app judges it.
     private var appPID: PID {
         NSRunningApplication.runningApplications(withBundleIdentifier: Self.appBundleID).first
             .map { PID($0.processIdentifier) } ?? PID(-1)
@@ -357,6 +411,7 @@ final class AppLink {
         case rejected(String)
         case phaseNotReached(String, last: String)
         case typedNotReached(String, last: String)
+        case notReached(String)
 
         var description: String {
             switch self {
@@ -364,6 +419,7 @@ final class AppLink {
             case .rejected(let reason): "the app rejected the request: \(reason)"
             case .phaseNotReached(let phase, let last): "phase stayed \(last), expected \(phase)"
             case .typedNotReached(let typed, let last): "typed prefix stayed '\(last)', expected '\(typed)'"
+            case .notReached(let what): "never reached: \(what)"
             }
         }
     }
@@ -432,6 +488,18 @@ final class AppLink {
             last = try await status()
         }
         guard last.typed == typed else { throw Failure.typedNotReached(typed, last: last.typed) }
+        return last
+    }
+
+    /// Polls until the snapshot satisfies `condition`.
+    func waitFor(_ what: String, timeout: Duration = .seconds(2), until condition: (SessionSnapshot) -> Bool) async throws -> SessionSnapshot {
+        let until = ContinuousClock.now + timeout
+        var last = try await status()
+        while !condition(last), ContinuousClock.now < until {
+            try await Task.sleep(for: .milliseconds(30))
+            last = try await status()
+        }
+        guard condition(last) else { throw Failure.notReached("\(what), practice \(last.practice ?? "-")") }
         return last
     }
 

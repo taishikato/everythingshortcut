@@ -1,5 +1,8 @@
 import AppKit
 import ApplicationServices
+#if DEBUG
+import Desktop
+#endif
 import HintCore
 import ServiceManagement
 import SwiftUI
@@ -97,6 +100,25 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         model.dismissed()
         NSApp.setActivationPolicy(.accessory)
     }
+
+    #if DEBUG
+    /// For the automation hook: the window with the try step ready, as Try It opens it.
+    func showPractice() {
+        show()
+        model.tryAgain()
+    }
+
+    /// Converted when asked, because the window may have moved since the view recorded the frame.
+    var practiceDump: PracticeDump {
+        let primaryHeight = Desktop.displays().primary?.bounds.height ?? 0
+        func global(_ r: NSRect) -> GlobalRect { GlobalRect(AppKitRect(r), primaryDisplayHeight: primaryHeight) }
+        var target: GlobalRect?
+        if case .open = model.guide.practiceRow, let frame = model.practiceTargetFrame, let content = window.contentView {
+            target = global(window.convertToScreen(content.convert(frame, to: nil)))
+        }
+        return PracticeDump(practice: model.guide.practice, target: target, window: window.isVisible ? global(window.frame) : nil)
+    }
+    #endif
 }
 
 /// The window's state. `guide` decides what the checklist shows, and every button is one `send`.
@@ -117,6 +139,10 @@ final class SettingsModel {
     /// Set by the window controller.
     @ObservationIgnored var onComeForward: () -> Void = {}
     @ObservationIgnored var onClose: () -> Void = {}
+    #if DEBUG
+    /// The Click Me button in the hosting view's space, recorded by the view for the automation snapshot.
+    @ObservationIgnored var practiceTargetFrame: CGRect?
+    #endif
 
     @ObservationIgnored private let controller: HintController
     @ObservationIgnored private let statusItem: NSStatusItem
@@ -499,6 +525,9 @@ private struct PracticeStepRow: View {
                 }
                 .controlSize(.large)
                 .disabled(practice == .succeeded)
+                #if DEBUG
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.practiceTargetFrame = $0 }
+                #endif
                 .padding(.vertical, 6)
                 Text(status(practice))
                     .foregroundStyle(.secondary)
