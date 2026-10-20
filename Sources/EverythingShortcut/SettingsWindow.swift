@@ -264,7 +264,13 @@ final class SettingsModel {
         if isRecording { stopRecording() } else { startRecording() }
     }
 
+    /// The key monitor sees keys only while the app is active, and a label press on the shortcut button
+    /// does not activate the app (see `AppProbe.perform`), so recording waits for the app to be active.
     private func startRecording() {
+        guard NSApp.isActive else {
+            onComeForward()
+            return
+        }
         controller.suspendTrigger()
         triggerError = ""
         isRecording = true

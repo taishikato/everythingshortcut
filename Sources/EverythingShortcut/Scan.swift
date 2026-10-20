@@ -293,7 +293,11 @@ actor AppProbe {
             // inactive agent app's `activate` request for another app be ignored.
             AXUIElementPerformAction(window, kAXRaiseAction as CFString)
             AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
-            AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+            // Not for our own app: setting it in-process switched to another Space while our window showed over
+            // a full-screen app (measured), and a window of ours that got a label is already in front of the user.
+            if case .queue = lane {
+                AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+            }
             raised = true
         }
 

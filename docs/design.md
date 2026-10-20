@@ -330,6 +330,10 @@ The probe reads `AXUIElementCopyActionNames` for the chosen element only, one IP
 1. Raise, for `.window` surfaces only.
    The probe performs `AXRaise` and sets `AXMain` on the element's window, then sets `AXFrontmost` on its app.
    Activation goes through AX because cooperative activation lets macOS 14 and later ignore an agent app's `activate` request.
+   For our own window the probe skips `AXFrontmost`.
+   Set in-process, it switched to another Space while our window showed over a full-screen app, and the window was gone from the screen right after a successful try (measured).
+   A window of ours that got a label is in front of the user already, so the press needs no activation.
+   The shortcut recorder needs key focus, so it starts only while the app is active, and otherwise only asks for activation.
 2. Act.
    Web content is always clicked, after the same raise.
    Chrome answers `AXPress` on web elements with `kAXErrorSuccess` and performs nothing, so a successful press does not mean the link was activated.
