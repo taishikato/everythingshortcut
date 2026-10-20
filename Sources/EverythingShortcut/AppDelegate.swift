@@ -78,6 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller?.triggerPressed()
     }
 
+    /// Opening the app again while it runs shows Settings. The status item is the only other way in,
+    /// and macOS hides status items behind the notch when the menu bar is full.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return false
+    }
+
     /// An accessory app shows no menu bar, but text fields still get Cut, Copy, Paste and Undo
     /// only through the main menu's key equivalents.
     private static func editMenu() -> NSMenu {

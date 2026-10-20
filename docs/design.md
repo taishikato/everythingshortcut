@@ -40,6 +40,7 @@ If another app already holds the chord, the menu says so, and "Show hints" is st
 "Show hints" starts hint mode from the menu, "Settings…" opens the Settings window, and "Quit" ends the app.
 
 The Settings window changes the trigger chord and the label alphabet.
+Opening the app again while it runs also shows the window, because macOS hides status items behind the notch when the menu bar is full.
 Click the trigger button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
