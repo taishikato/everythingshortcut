@@ -25,12 +25,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.center()
     }
 
-    /// The app is `.accessory`, so the window only takes keys after the app activates.
+    /// The app is `.accessory`, which macOS never treats as the selected app: no Dock icon, no ⌘Tab entry,
+    /// no menu bar. So the app is regular while Settings is open and goes back to `.accessory` on close.
     func show() {
         model.refresh()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.applicationIconImage = dockIcon
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
+
+    /// The bundle has no icon file, so the Dock shows the same badge the Settings card draws.
+    private lazy var dockIcon = ImageRenderer(content: DockIcon()).nsImage
 
     func refresh() { model.refresh() }
 
@@ -39,7 +45,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) { model.stopRecording() }
 
-    func windowWillClose(_ notification: Notification) { model.stopRecording() }
+    func windowWillClose(_ notification: Notification) {
+        model.stopRecording()
+        NSApp.setActivationPolicy(.accessory)
+    }
 }
 
 /// Settings state. A shortcut change goes through `apply`, which persists it and hands it to the reducer.
@@ -179,7 +188,7 @@ struct SettingsView: View {
         Form {
             Section {
                 HStack(spacing: 12) {
-                    AppIcon()
+                    AppIcon(size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Everything Shortcut").font(.title3.weight(.semibold))
                         Text("Click anything on screen from the keyboard.").foregroundStyle(.secondary)
@@ -249,15 +258,22 @@ struct SettingsView: View {
 
 /// A yellow badge with a keyboard, drawn like the hints on screen. The app bundle has no icon file.
 private struct AppIcon: View {
+    let size: CGFloat
+
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
         Image(systemName: "keyboard")
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: size * 0.5, weight: .semibold))
             .foregroundStyle(Color(nsColor: BadgeStyle.text))
-            .frame(width: 40, height: 40)
+            .frame(width: size, height: size)
             .background(LinearGradient(colors: [Color(nsColor: BadgeStyle.fillTop), Color(nsColor: BadgeStyle.fillBottom)], startPoint: .top, endPoint: .bottom), in: shape)
-            .overlay(shape.strokeBorder(Color(nsColor: BadgeStyle.border), lineWidth: 1))
+            .overlay(shape.strokeBorder(Color(nsColor: BadgeStyle.border), lineWidth: max(1, size / 40)))
     }
+}
+
+/// The badge on the Dock's 1024-point icon grid, which leaves a margin around the shape.
+private struct DockIcon: View {
+    var body: some View { AppIcon(size: 824).frame(width: 1024, height: 1024) }
 }
 
 extension Modifiers {

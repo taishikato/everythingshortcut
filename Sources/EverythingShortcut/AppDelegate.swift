@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.onSettingsApplied = { [weak self] in self?.settingsWindow?.refresh() }
         self.controller = controller
         statusItem = makeStatusItem()
-        NSApp.mainMenu = Self.editMenu()
+        NSApp.mainMenu = mainMenu()
 
         #if DEBUG
         assert(CGWindowLevelForKey(.dockWindow) == Int32(WindowLayer.dock))
@@ -77,21 +77,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
-    /// An accessory app shows no menu bar, but text fields still get Cut, Copy, Paste and Undo
-    /// only through the main menu's key equivalents.
-    private static func editMenu() -> NSMenu {
-        let edit = NSMenu(title: "Edit")
-        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        let item = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
-        item.submenu = edit
+    /// Shown only while Settings makes the app a regular app, so ⌘, ⌘W, ⌘H and ⌘Q work as in any app.
+    private func mainMenu() -> NSMenu {
+        let app = NSMenu()
+        app.addItem(action("Settings…", #selector(openSettings), key: ","))
+        app.addItem(.separator())
+        app.addItem(action("Hide Everything Shortcut", #selector(NSApplication.hide(_:)), target: NSApp, key: "h"))
+        app.addItem(.separator())
+        app.addItem(action("Quit Everything Shortcut", #selector(NSApplication.terminate(_:)), target: NSApp, key: "q"))
+        let window = NSMenu(title: "Window")
+        window.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let main = NSMenu()
-        main.addItem(item)
+        for (title, submenu) in [("Everything Shortcut", app), ("Window", window)] {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.submenu = submenu
+            main.addItem(item)
+        }
         return main
     }
 

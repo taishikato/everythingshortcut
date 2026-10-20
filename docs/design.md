@@ -43,6 +43,8 @@ The Settings window shows the app's name and version, the trigger chord, and a S
 Status shows a green checkmark when Accessibility is granted, or an orange warning with a button to System Settings when it is not, and holds the "Launch at login" switch.
 The switch registers the app with `SMAppService.mainApp`, and when macOS waits for the user's approval it says so and offers to open Login Items.
 Opening the app again while it runs also shows the window, because macOS hides status items behind the notch when the menu bar is full.
+While the window is open the app is a regular app, with a Dock icon, a ⌘Tab entry and a menu bar of its own, because macOS never treats an `.accessory` app as the selected app.
+Closing the window makes it `.accessory` again.
 Click the trigger button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
