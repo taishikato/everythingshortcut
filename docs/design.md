@@ -33,11 +33,21 @@ A letter that matches no label beeps and changes nothing.
 Hint mode does not start while a password field holds Secure Event Input, because typed labels would reach the field.
 It also does not start before Accessibility is granted, and it shows the system prompt instead.
 
-The keyboard icon in the menu bar opens a menu with four items.
+The keyboard icon in the menu bar opens a menu with five items.
 The first shows whether Accessibility is granted and opens the Accessibility pane of System Settings.
 The second shows the trigger chord and whether it registered.
 If another app already holds the chord, the menu says so, and "Show hints" is still there.
-"Show hints" starts hint mode from the menu, and "Quit" ends the app.
+"Show hints" starts hint mode from the menu, "Settings…" opens the Settings window, and "Quit" ends the app.
+
+The Settings window changes the trigger chord and the label alphabet.
+Click the trigger button and type a chord.
+The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
+An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
+The status line under it says whether the chord registered, or which chord another app holds.
+The labels field takes two or more distinct letters, and uppercase input is lowercased.
+Its error line updates on every keystroke, and the alphabet applies on Return or when the field loses focus.
+"Restore Defaults" brings back ⇧⌘Space and the home-row alphabet.
+Changes persist in `UserDefaults` and take effect without a restart, but never in the middle of a hint session.
 
 ### The developer
 
@@ -68,16 +78,36 @@ func triggerPressed() {
 }
 ```
 
+Settings reach the reducer the same way, and the reducer alone decides when they apply.
+
+```swift
+// AppDelegate
+let config = HintConfig.standard.applying(SettingsStore.load())   // per-field fallback to .standard
+
+// SettingsWindowController.apply
+SettingsStore.save(settings)
+controller.configure(settings)    // send(.configure(settings))
+
+// HintController.run
+case .applySettings(let settings):   // only ever emitted at idle
+    triggerRegistration = hotKey.register(settings.trigger)
+    keys.trigger = settings.trigger
+    keys.alphabet = settings.alphabet
+    config = config.applying(settings)
+    onSettingsApplied()
+```
+
 The reducer's contract reads as a test, because it is one (`Tests/HintCoreTests/HintMachineTests.swift`).
 
 ```swift
-var m = HintMachine<Int>(alphabet: .homeRow)
+var m = HintMachine<Int>(settings: .standard)
 m.send(.trigger(.ready))                // [.captureKeys(true), .startScan(1)]
 m.send(.trigger(.ready))                // [.cancelScan, .captureKeys(false)]   trigger again cancels
 m.send(.scanned(ScanID(raw: 1), cs))    // []                                    stale scan dropped
 m.send(.trigger(.ready))                // [.captureKeys(true), .startScan(2)]
 m.send(.scanned(ScanID(raw: 2), cs))    // [.render(board)]
-m.send(.mouseDown)                      // [.render(nil), .captureKeys(false)]   a click anywhere cancels
+m.send(.configure(s))                   // []                                    waits for idle
+m.send(.mouseDown)                      // [.render(nil), .captureKeys(false), .applySettings(s)]
 ```
 
 The controller runs effects and nothing else.
@@ -98,7 +128,8 @@ case .perform(let target):
     }
 ```
 
-Settings later edit one value.
+The user edits the trigger and the alphabet in Settings.
+Every other tunable is one value in code.
 Choosing press or click is one word, and adding a hintable role is one line.
 
 ```swift
@@ -117,8 +148,9 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Package.swift` | Six targets, tools 6.2, macOS 15, Swift 6 language mode. |
 | `Sources/HintCore/Geometry.swift` | `GlobalPoint`, `GlobalRect`, `AppKitRect`, the only AppKit conversion, `Display`, `LocalPoint`. |
 | `Sources/HintCore/Config.swift` | `HintConfig.standard`, the one source of tunables. |
-| `Sources/HintCore/Labels.swift` | `Alphabet` and `LabelGenerator.labels(count:alphabet:)`. |
-| `Sources/HintCore/Keys.swift` | `Modifiers`, `HotKey`, `KeyInput`, `KeyRouting.route`. |
+| `Sources/HintCore/Settings.swift` | `UserSettings`, `StoredSettings` and its per-field parse, `HintConfig.applying`. |
+| `Sources/HintCore/Labels.swift` | `Alphabet`, `Alphabet.parse` with `AlphabetError`, and `LabelGenerator.labels(count:alphabet:)`. |
+| `Sources/HintCore/Keys.swift` | `Modifiers`, `VirtualKey` and its key-name table, `HotKey`, `HotKey.validated` with `TriggerError`, `KeyInput`, `KeyRouting.route`. |
 | `Sources/HintCore/HintMachine.swift` | `Candidate`, `Hint`, `Board`, `Phase`, `Event`, `Effect`, and the `HintMachine` reducer. |
 | `Sources/HintCore/RoleTable.swift` | `RoleRule`, `ChildrenSource`, `RoleTable.standard`, and the web search keys. |
 | `Sources/HintCore/Traversal.swift` | `ElementReader`, `NodeFacts`, and `Traversal.harvest`. |
@@ -130,11 +162,13 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/EverythingShortcut/HintController.swift` | The single owner of session state. |
 | `Sources/EverythingShortcut/Scan.swift` | `Scanner`, `ProbeQueues`, `AppProbe`, `ElementRef`, `AXReader`, and every AX IPC call. |
 | `Sources/EverythingShortcut/KeyCapture.swift` | The event tap and its C callback. |
-| `Sources/EverythingShortcut/HotKey.swift` | Carbon `RegisterEventHotKey`. |
-| `Sources/EverythingShortcut/KeyboardLayout.swift` | Key code to character through the ASCII-capable layout. |
+| `Sources/EverythingShortcut/HotKey.swift` | Carbon `RegisterEventHotKey` and `UnregisterEventHotKey`. |
+| `Sources/EverythingShortcut/KeyboardLayout.swift` | Key code to character through the ASCII-capable layout, and the name every chord is shown with. |
+| `Sources/EverythingShortcut/SettingsStore.swift` | `UserSettings` in `UserDefaults.standard`, read through `StoredSettings`. |
+| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController`, the trigger recorder and the alphabet field. |
 | `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, `BadgeStyle`. |
 | `Sources/EverythingShortcut/Automation.swift` | The `#if DEBUG` hook that posts real keystrokes and writes `SessionSnapshot`. |
-| `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the trust prompt, and the status item menu. |
+| `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the trust prompt, and the status item menu. |
 | `Sources/es-dev/` | `windows`, `fixture` and `e2e`. |
 | `Tests/HintCoreTests/` | Tests over the pure core. |
 | `scripts/` | `check-invariants.sh`, `bundle.sh`, `e2e.sh`. |
@@ -161,7 +195,11 @@ Every core type is a value type and Sendable.
 - `Phase<Target>` is `idle`, `scanning(ScanID)`, `showing(Board)`, or `performing(Target)`.
   No booleans sit beside it.
 - `Effect<Target>` is the full command set for the shell.
-  It has `startScan`, `cancelScan`, `captureKeys`, `render`, `perform`, and `alert`.
+  It has `startScan`, `cancelScan`, `captureKeys`, `render`, `perform`, `alert`, and `applySettings`.
+- `UserSettings` is the trigger and the alphabet, the part of `HintConfig` the user edits.
+  `HintMachine` holds the applied value and at most one pending value, which waits for idle.
+- `StoredSettings` is the persisted form, three optional raw fields.
+  `UserSettings(stored:)` parses it field by field, so a bad trigger falls back to the standard trigger and keeps the user's alphabet.
 - `RoleTable` maps role strings to `.hint`, `.container(ChildrenSource, clips:)`, or `.skip`, plus a fallback.
 
 The core is generic over `Target`.
@@ -227,7 +265,7 @@ Tracing that flow takes three files: `HintController.swift`, `HintMachine.swift`
 `Scanner` exposes one method, `scan(_:)`.
 It hides the snapshot, the plan, the queue lanes, the per-app fan-out, AX error classification, web accessibility enablement, and occlusion.
 `AppProbe` exposes `scan` and `perform`, and `ElementRef.perform` is the only way to act on an element.
-`HintController` exposes `triggerPressed`, `send`, the trigger registration, and read-only diagnostics for the DEBUG hook.
+`HintController` exposes `triggerPressed`, `send`, `configure`, `suspendTrigger` and `resumeTrigger`, the applied settings and the trigger registration, and read-only diagnostics for the DEBUG hook.
 No AX or CG type appears on any of those signatures.
 
 ## AXUIElement across threads under Swift 6
@@ -367,7 +405,23 @@ The filter reports each dropped extra with both pids, and the DEBUG snapshot car
 
 The trigger is a Carbon `RegisterEventHotKey` registration, which needs no permission.
 Registration failure is a state, not a crash.
-`HotKeyCenter.register` returns `.registered` or `.failed(status)`, the controller keeps it, and the status menu shows it.
+`HotKeyCenter.register` returns `.registered` or `.failed(status)`, the controller keeps it, and the status menu and Settings show it.
+A chord that fails to register stays chosen and persisted, as at launch, and "Show hints" in the menu still works.
+
+The user picks the trigger in Settings, and `HotKey.validated` decides which chords are allowed.
+`KeyRouting.route` passes the trigger through before anything else, so a chord needs Control, Option or Command.
+A bare or Shift-only chord would shadow label typing, and an Escape or Delete chord would shadow cancel or Backspace, so both are rejected.
+Carbon fires a registered chord even while our own window is key.
+So the recorder suspends the trigger while it records, and every way out of recording registers the applied chord again.
+
+A settings change is an event, `.configure`, and the reducer applies it only at idle.
+Mid-session it waits as pending, the last one wins, and every transition into idle emits `.applySettings` after its other effects.
+So the chord that ends a session is the one that started it, and the tap's alphabet always matches the labels on screen.
+The controller then registers the new chord, retunes `KeyCapture`, which is disabled at idle, and redraws the Settings window.
+
+Chords are shown through `KeyboardLayout.name(of:)`.
+Keys that type nothing printable, such as Space, Return, the arrows and F1 to F20, come from the core's `VirtualKey.name(for:)` table.
+Other keys show their character in the ASCII-capable layout, uppercased.
 
 While hint mode is active, a session-level event tap at the head of the queue owns typing.
 It listens for keyDown and for left, right, and other mouse-down.
@@ -401,7 +455,7 @@ The canvas caches the attributed string and size of each label and typed count, 
 Verification has five layers, and only the last needs a person once.
 
 1. `swift test` covers the core.
-   The tests cover prefix-free shortest labels for every count from 1 to 600, the full transition table, the observed window stack with its alpha-0 window and lock-screen shield, traversal IPC cost, frame pass-through, occlusion pruning, extras deduplication, the AppKit conversion, key routing, and badge layout.
+   The tests cover prefix-free shortest labels for every count from 1 to 600, the full transition table including deferred settings, settings parsing and fallback, trigger validation, the observed window stack with its alpha-0 window and lock-screen shield, traversal IPC cost, frame pass-through, occlusion pruning, extras deduplication, the AppKit conversion, key routing, and badge layout.
 2. `scripts/check-invariants.sh` fails on any `@unchecked`, any import in `HintCore`, a role string outside `RoleTable.swift`, the AppKit conversion outside `Geometry.swift`, and AX IPC calls outside `Scan.swift`.
 3. `es-dev windows` prints the window stack, each window's exposure, and the scan plan, using the same `Desktop` reads and `ScanPlan` as the app.
    It needs no Accessibility.
@@ -410,7 +464,9 @@ Verification has five layers, and only the last needs a person once.
    es-dev hosts the fixture windows in its own process with the regular activation policy, so it needs no permission.
    It drives the app over `DistributedNotificationCenter`, and the app writes each reply atomically to the path named in the request.
    The app's DEBUG hook posts real keystrokes with `CGEventPost(.cghidEventTap)`, so they pass through Carbon hotkey matching and our own session tap.
-   The hook cannot call the reducer, so a passing run exercises the real hotkey, tap, scan and press path.
+   The hook never sends a key, trigger or mouse event to the reducer, so a passing run exercises the real hotkey, tap, scan and press path.
+   Its one direct call is `configure`, which applies settings without persisting them, so a run never rewrites the user's saved settings.
+   The last check switches to ⌃⌥⌘J and the alphabet "qwertyuiop", proves the old chord no longer starts a session and the new one shows only labels from the new letters, then restores the settings the run started with, on the failure path too.
    Beyond the fixture, it requires at least one `statusItem`, `menuBar` or `dock` hint whenever the live window stack exposes a status-level, main-menu or Dock window, so the run also proves the surfaces outside the fixture.
    es-dev prints `VERIFIED` or `NOT VERIFIED` for each check and saves a `screencapture -x` of the badges under `build/e2e/`.
 5. The one manual step is granting Accessibility to `build/EverythingShortcut.app`.
