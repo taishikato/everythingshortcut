@@ -16,6 +16,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private var trustWatch: Task<Void, Never>?
     private var occlusionObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
 
     init(controller: HintController, statusItem: NSStatusItem) {
         model = SettingsModel(controller: controller, statusItem: statusItem)
@@ -24,10 +25,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window = NSWindow(contentViewController: hosting)
         super.init()
         window.styleMask = [.titled, .closable]
+        // Opened from another Space or over a full-screen app, the window comes to the user's Space.
+        // Without this, activating the app (a reopen, or a label press on one of its controls) switched
+        // to the window's old Space, measured over a full-screen app, and the user lost the window.
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()
         model.onComeForward = { [weak self] in self?.comeForward() }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.followActiveSpace() }
+        }
         model.onClose = { [weak self] in self?.window.performClose(nil) }
         // When launch opens this window, the status item's window may not have its occlusion state yet.
         if let itemWindow = statusItem.button?.window {
@@ -63,6 +73,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func comeForward() {
         NSApp.activate()
         window.orderFrontRegardless()
+    }
+
+    /// Opening the app from a full-screen app's Space switches to a desktop Space after `show` ordered the
+    /// window, which stayed behind on the full-screen Space (measured with a reopen). So while the app is active,
+    /// a Space change brings the window along, and `moveToActiveSpace` moves it instead of switching back.
+    private func followActiveSpace() {
+        guard NSApp.isActive, window.isVisible, !window.isOnActiveSpace else { return }
+        window.makeKeyAndOrderFront(nil)
     }
 
     /// No public API tells the app that Accessibility was turned on, so while the window is open without it,

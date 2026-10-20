@@ -526,6 +526,10 @@ A trigger refused for lack of Accessibility opens the window at that step.
 Closing the window in any way (Skip Setup, Done, Command-W, the close button) completes setup, stored once as `setupComplete`.
 Quitting does not, so a quit mid-setup shows setup again at the next launch.
 
+The window moves to the user's Space instead of pulling the user to its own (`.moveToActiveSpace`), and it can show over a full-screen app (`.fullScreenAuxiliary`).
+Opening the app from a full-screen app's Space still switches to a desktop Space, after `show` ordered the window, and the window stayed behind on the full-screen Space, measured with a reopen.
+So while the app is active, a change of the active Space brings the window along.
+
 ### The system prompt
 
 The Accessibility button is the only caller of `AXIsProcessTrustedWithOptions`, and `scripts/check-invariants.sh` fails on any other.
