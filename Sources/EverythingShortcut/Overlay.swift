@@ -65,7 +65,8 @@ final class Notice {
         hiding?.cancel()
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
-        let size = panel.pill.show(text)
+        panel.pill.message = text
+        let size = panel.pill.intrinsicContentSize
         let top = screen.visibleFrame.maxY - 8
         panel.setFrame(NSRect(x: (screen.frame.midX - size.width / 2).rounded(), y: (top - size.height).rounded(), width: size.width, height: size.height), display: true)
         // A zero-length group replaces a fade still running from the notice this one replaces.
@@ -107,19 +108,23 @@ final class NoticePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// The pill: the badge gradient, border and dark text, with room around it for the shadow.
 final class NoticePill: NSView {
     private static let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
     private static let padding = NSSize(width: 14, height: 6)
     private static let shadowRoom: CGFloat = 4
     private var text = NSAttributedString()
 
+    var message = "" {
+        didSet {
+            text = NSAttributedString(string: message, attributes: [.font: Self.font, .foregroundColor: BadgeStyle.text])
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
+        }
+    }
+
     override var isFlipped: Bool { true }
 
-    /// Sets the text and returns the panel size that fits it.
-    func show(_ string: String) -> NSSize {
-        text = NSAttributedString(string: string, attributes: [.font: Self.font, .foregroundColor: BadgeStyle.text])
-        needsDisplay = true
+    override var intrinsicContentSize: NSSize {
         let size = text.size()
         return NSSize(
             width: ceil(size.width) + 2 * (Self.padding.width + Self.shadowRoom),

@@ -322,8 +322,8 @@ actor AppProbe {
     }
 
     /// Posts a left click through the HID tap, then puts the cursor back. Blocking waits are fine on another
-    /// app's probe queue. On the main lane they stall the app, which only an element of ours with no
-    /// `AXPress` reaches.
+    /// app's probe queue. On the main lane they stall the app, which happens only when one of our own
+    /// elements has no `AXPress` or its press fails.
     private func click(_ point: GlobalPoint, afterRaise: Bool) {
         if afterRaise {
             let until = ContinuousClock.now + config.frontmostWait
@@ -367,7 +367,6 @@ enum ProbeQueues {
     static let light = (0..<2).map { DispatchSerialQueue(label: "everything-shortcut.ax.light.\($0)", qos: .userInitiated) }
     static let heavy = (0..<6).map { DispatchSerialQueue(label: "everything-shortcut.ax.heavy.\($0)", qos: .userInitiated) }
 
-    /// Our own job runs on main. Every other job goes round-robin within its lane, in plan order.
     static func assign(_ jobs: [AppScan], selfPID: PID) -> [(AppScan, ProbeLane)] {
         var lightIndex = 0
         var heavyIndex = 0

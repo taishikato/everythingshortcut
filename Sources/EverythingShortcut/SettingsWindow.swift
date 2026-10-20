@@ -46,11 +46,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.title = model.guide.isComplete ? "Everything Shortcut Settings" : "Welcome to Everything Shortcut"
         NSApp.setActivationPolicy(.regular)
         NSApp.applicationIconImage = dockIcon
-        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
-        // macOS may refuse an agent app's activation request (cooperative activation), and the window
-        // must still be in front.
-        window.orderFrontRegardless()
+        comeForward()
         watchTrust()
     }
 
@@ -61,13 +58,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func note(_ note: SessionNote) { model.note(note) }
 
-    /// Activation is only a request, so the window is also ordered above the app the user is in.
+    /// Activation is only a request, which macOS may refuse an agent app (cooperative activation),
+    /// so the window is also ordered above the app the user is in.
     private func comeForward() {
         NSApp.activate()
         window.orderFrontRegardless()
     }
 
-    /// Nothing tells the app that Accessibility was turned on, so while the window is open without it,
+    /// No public API tells the app that Accessibility was turned on, so while the window is open without it,
     /// it reads the grant every 0.5 s and stops at the grant or on close.
     private func watchTrust() {
         guard trustWatch == nil, !model.guide.facts.trusted else { return }
@@ -121,7 +119,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     #endif
 }
 
-/// The window's state. `guide` decides what the checklist shows, and every button is one `send`.
+/// The window's state. `guide` decides what the checklist shows.
 /// A shortcut change goes through `apply`, which persists it and hands it to the reducer.
 /// The reducer decides when it takes effect, and `refresh` redraws from the applied settings once it has.
 @MainActor
@@ -136,7 +134,6 @@ final class SettingsModel {
     private(set) var guide: SetupGuide
     private(set) var menuBarIcon = MenuBarIcon.hidden
 
-    /// Set by the window controller.
     @ObservationIgnored var onComeForward: () -> Void = {}
     @ObservationIgnored var onClose: () -> Void = {}
     #if DEBUG

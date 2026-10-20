@@ -5,7 +5,7 @@ public enum SetupStep: Hashable, Sendable, CaseIterable {
     case practice
 }
 
-/// What the shell reads from macOS on each refresh. The window keeps no other copy of these facts.
+/// What the shell reads from macOS on each refresh.
 public struct SetupFacts: Hashable, Sendable {
     public var trusted: Bool
     /// Registered, and no enabled macOS shortcut takes it first.
@@ -21,7 +21,7 @@ public struct SetupFacts: Hashable, Sendable {
     }
 }
 
-/// What the app window learns about hint sessions. `HintController` derives one per drained event.
+/// What the app window learns about hint sessions. `HintController` derives at most one per drained event.
 public enum SessionNote: Hashable, Sendable {
     case started
     /// Back to idle. `performed` is true when a label was typed to the end and its element acted.
@@ -30,13 +30,6 @@ public enum SessionNote: Hashable, Sendable {
     case blocked(Alert)
 
     /// The meaning of one reducer step to the app window. Nil when the step changes nothing it shows.
-    ///
-    ///     idle               -> idle, event trigger(blocked a)   blocked(a)
-    ///     idle               -> scanning                         started
-    ///     performing         -> idle                             ended(performed: true)
-    ///     scanning | showing -> idle                             ended(performed: false)
-    ///     anything else                                          nil
-    ///
     /// `Phase` is Equatable only for an Equatable `Target`, so this matches cases and never compares boards.
     public static func of<Target>(_ event: Event<Target>, from before: Phase<Target>, to after: Phase<Target>) -> SessionNote? {
         switch (before, after) {

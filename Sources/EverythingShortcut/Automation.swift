@@ -6,13 +6,12 @@ import CoreGraphics
 import HintCore
 import os
 
-/// The app window's side of the automation hook. `dump` is nil while the window was never opened.
+/// The app window's side of the automation hook. `dump` returns nil while the window was never opened.
 struct PracticeHook {
     let open: @MainActor () -> Void
     let dump: @MainActor () -> PracticeDump?
 }
 
-/// The try step and where it is, in global display space.
 struct PracticeDump {
     let practice: Practice
     let target: GlobalRect?

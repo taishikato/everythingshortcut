@@ -16,7 +16,6 @@ final class HotKeyCenter {
 
     var onPress: () -> Void = {}
 
-    /// What the status menu and the app window say about the applied trigger.
     static func status(_ registration: Registration, for hotKey: HotKey) -> ShortcutStatus {
         if SystemShortcuts.enabled().contains(hotKey) { return .takenByMacOS }
         return switch registration {

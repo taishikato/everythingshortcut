@@ -491,7 +491,6 @@ final class AppLink {
         return last
     }
 
-    /// Polls until the snapshot satisfies `condition`.
     func waitFor(_ what: String, timeout: Duration = .seconds(2), until condition: (SessionSnapshot) -> Bool) async throws -> SessionSnapshot {
         let until = ContinuousClock.now + timeout
         var last = try await status()
