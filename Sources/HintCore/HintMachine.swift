@@ -74,6 +74,8 @@ public enum Event<Target: Sendable>: Sendable {
     case performed
     /// The event tap could not be created or re-enabled.
     case keyCaptureLost
+    /// The user chose new settings. They apply at once when idle, otherwise when the session ends.
+    case configure(UserSettings)
 }
 
 /// Commands for the shell. The shell runs them in order and never decides policy.
@@ -86,6 +88,8 @@ public enum Effect<Target: Sendable>: Sendable {
     case render(Board<Target>?)
     case perform(Target)
     case alert(Alert)
+    /// Register the trigger and retune key capture for these settings. Only ever emitted at idle.
+    case applySettings(UserSettings)
 }
 
 /// The hint session. The single owner of session state is the `HintController` that holds this value.
@@ -104,19 +108,44 @@ public enum Effect<Target: Sendable>: Sendable {
 ///     showing     letter, prefix     -> showing           [render(board)]
 ///     performing  performed          -> idle              []
 ///     scanning|showing keyCaptureLost -> idle             [cancelScan?, render(nil)?, captureKeys(false), alert]
+///     idle        configure(s)       -> idle              [applySettings(s)]
+///     other       configure(s)       -> unchanged         []                    (s waits as pending, the last one wins)
+///     any row that lands in idle with s pending           [..., applySettings(s)]  (labels of later scans use s)
 ///
+/// Settings never change mid-session, so the trigger that ends a session is the one that started it,
+/// and the tap's alphabet always matches the labels on screen.
 /// Scan ids make stale results harmless. A cancelled scan's `scanned` event matches no state.
 /// A trigger or mouse-down while performing is ignored, so our own synthesized click cannot end it.
 /// Performing lasts one AX call plus at most one click.
 public struct HintMachine<Target: Sendable>: Sendable {
     public private(set) var phase: Phase<Target> = .idle
-    private let alphabet: Alphabet
+    public private(set) var settings: UserSettings
+    /// Invariant: nil whenever `phase` is idle.
+    private var pending: UserSettings?
     private var scansStarted: UInt64 = 0
 
-    public init(alphabet: Alphabet) { self.alphabet = alphabet }
+    public init(settings: UserSettings) { self.settings = settings }
 
     public mutating func send(_ event: Event<Target>) -> [Effect<Target>] {
+        var effects = transition(event)
+        if case .idle = phase, let next = pending {
+            pending = nil
+            settings = next
+            effects.append(.applySettings(next))
+        }
+        return effects
+    }
+
+    private mutating func transition(_ event: Event<Target>) -> [Effect<Target>] {
         switch (phase, event) {
+        case (.idle, .configure(let next)):
+            settings = next
+            return [.applySettings(next)]
+
+        case (_, .configure(let next)):
+            pending = next
+            return []
+
         case (.idle, .trigger(.ready)):
             scansStarted += 1
             let id = ScanID(raw: scansStarted)
@@ -135,7 +164,7 @@ public struct HintMachine<Target: Sendable>: Sendable {
                 phase = .idle
                 return [.captureKeys(false), .alert(.noHints)]
             }
-            let board = Board(hints: Self.label(candidates, alphabet: alphabet))
+            let board = Board(hints: Self.label(candidates, alphabet: settings.alphabet))
             phase = .showing(board)
             return [.render(board)]
 

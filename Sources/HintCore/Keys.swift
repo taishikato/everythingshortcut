@@ -9,6 +9,10 @@ public struct Modifiers: OptionSet, Hashable, Sendable {
     public static let shift = Modifiers(rawValue: 1 << 1)
     public static let option = Modifiers(rawValue: 1 << 2)
     public static let control = Modifiers(rawValue: 1 << 3)
+
+    /// Command, Control and Option. A key held with one of these is a shortcut, not typing.
+    public static let shortcut: Modifiers = [.command, .control, .option]
+    public static let all: Modifiers = [.command, .shift, .option, .control]
 }
 
 /// macOS virtual key codes (kVK_* in Carbon's Events.h) that the core needs by name.
@@ -16,6 +20,19 @@ public enum VirtualKey {
     public static let space: UInt16 = 49
     public static let escape: UInt16 = 53
     public static let delete: UInt16 = 51
+
+    /// The name of a key that types no printable character, as macOS menus write it.
+    /// Nil for keys whose name is their character in the current layout.
+    public static func name(for keyCode: UInt16) -> String? { names[keyCode] }
+
+    private static let names: [UInt16: String] = [
+        space: "Space", escape: "⎋", delete: "⌫",
+        36: "↩", 48: "⇥", 117: "⌦",
+        115: "↖", 119: "↘", 116: "⇞", 121: "⇟",
+        123: "←", 124: "→", 125: "↓", 126: "↑",
+        122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8", 101: "F9", 109: "F10",
+        103: "F11", 111: "F12", 105: "F13", 107: "F14", 113: "F15", 106: "F16", 64: "F17", 79: "F18", 80: "F19", 90: "F20",
+    ]
 }
 
 /// A global trigger chord. Physical key code plus exact modifier set.
@@ -31,11 +48,37 @@ public struct HotKey: Hashable, Sendable {
     /// Homerow's and Shortcat's default.
     public static let commandShiftSpace = HotKey(keyCode: VirtualKey.space, modifiers: [.command, .shift])
 
-    /// The chord as macOS menus write it, modifiers in the order ⌃⌥⇧⌘.
-    public var displayName: String {
+    /// A chord the user may choose as the trigger. `KeyRouting.route` passes the trigger through before
+    /// anything else, so a chord without a shortcut modifier would shadow label typing, and an Escape or
+    /// Delete chord would shadow cancel or Backspace.
+    public static func validated(keyCode: UInt16, modifiers: Modifiers) -> Result<HotKey, TriggerError> {
+        if keyCode == VirtualKey.escape || keyCode == VirtualKey.delete { return .failure(.reservedKey) }
+        if modifiers.isDisjoint(with: .shortcut) { return .failure(.needsModifier) }
+        return .success(HotKey(keyCode: keyCode, modifiers: modifiers))
+    }
+
+    /// The chord as macOS menus write it, modifiers in the order ⌃⌥⇧⌘, then `keyName`.
+    public func displayName(keyName: String) -> String {
         let symbols: [(Modifiers, String)] = [(.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
-        let key = keyCode == VirtualKey.space ? "Space" : "key \(keyCode)"
-        return symbols.filter { modifiers.contains($0.0) }.map(\.1).joined() + key
+        return symbols.filter { modifiers.contains($0.0) }.map(\.1).joined() + keyName
+    }
+
+    /// `displayName(keyName:)` without a keyboard layout, so a letter key reads "key N".
+    public var displayName: String {
+        displayName(keyName: VirtualKey.name(for: keyCode) ?? "key \(keyCode)")
+    }
+}
+
+public enum TriggerError: Error, Hashable, Sendable {
+    case needsModifier
+    case reservedKey
+
+    /// One line for the inline error label in Settings.
+    public var message: String {
+        switch self {
+        case .needsModifier: "Hold ⌃, ⌥ or ⌘ with the key."
+        case .reservedKey: "Escape and Delete are reserved for hint mode."
+        }
     }
 }
 
@@ -77,7 +120,7 @@ public enum KeyRouting {
     ) -> TapVerdict {
         if keyCode == trigger.keyCode && modifiers == trigger.modifiers { return .passThrough }
         if keyCode == VirtualKey.escape { return .swallow(.escape) }
-        if !modifiers.isDisjoint(with: [.command, .control, .option]) { return .swallow(nil) }
+        if !modifiers.isDisjoint(with: .shortcut) { return .swallow(nil) }
         if keyCode == VirtualKey.delete { return .swallow(.backspace) }
         guard let c = character.flatMap({ $0.lowercased().first }), alphabet.contains(c) else {
             return .swallow(nil)

@@ -1,6 +1,6 @@
-/// Every tunable decision of the MVP in one value.
-/// The app reads `HintConfig.standard` exactly once, in `AppDelegate`, and passes it down.
-/// A settings screen later replaces `.standard` with a parsed, persisted value and nothing else changes.
+/// Every tunable decision in one value.
+/// `AppDelegate` builds it once as `HintConfig.standard.applying(SettingsStore.load())` and passes it down.
+/// The user edits only `settings` (trigger and alphabet), and the reducer applies a change only while idle.
 public struct HintConfig: Sendable {
     public var trigger: HotKey
     public var alphabet: Alphabet

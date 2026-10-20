@@ -6,7 +6,7 @@ struct BadgeLayoutTests {
     private let left = Display(id: DisplayID(2), bounds: GlobalRect(x: -1920, y: -200, width: 1920, height: 1080))
 
     private func board(_ frames: [GlobalRect], typing: [Character] = []) -> Board<Int>? {
-        var m = HintMachine<Int>(alphabet: .homeRow)
+        var m = HintMachine<Int>(settings: .standard)
         _ = m.send(.trigger(.ready))
         _ = m.send(.scanned(ScanID(raw: 1), frames.enumerated().map { Candidate(target: $0, pid: PID(1), surface: .window(WindowID(1)), frame: $1) }))
         for c in typing { _ = m.send(.key(.letter(c))) }

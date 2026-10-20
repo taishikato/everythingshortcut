@@ -13,7 +13,7 @@ import os
 /// traces a hotkey press all the way to the click.
 @MainActor
 final class HintController {
-    private let config: HintConfig
+    private var config: HintConfig
     private var machine: HintMachine<ElementRef>
     private let hotKey: HotKeyCenter
     private let keys: KeyCapture
@@ -25,7 +25,11 @@ final class HintController {
     private let log = Logger(subsystem: "com.taishikato.EverythingShortcut", category: "session")
 
     /// Whether the trigger chord is ours. A chord held by another app leaves the menu as the entry point.
-    let triggerRegistration: HotKeyCenter.Registration
+    /// A failed chord stays chosen and persisted, so the user sees the failure instead of a silent revert.
+    private(set) var triggerRegistration: HotKeyCenter.Registration
+
+    /// Runs after new settings took effect, so the settings window can redraw.
+    var onSettingsApplied: () -> Void = {}
 
     /// Diagnostics for the log and the DEBUG automation snapshot. Not session state.
     private(set) var lastScanStats: ScanStats?
@@ -33,7 +37,7 @@ final class HintController {
 
     init(config: HintConfig) {
         self.config = config
-        machine = HintMachine(alphabet: config.alphabet)
+        machine = HintMachine(settings: config.settings)
         keys = KeyCapture(trigger: config.trigger, alphabet: config.alphabet)
         scanner = Scanner(config: config)
         let hotKey = HotKeyCenter()
@@ -46,11 +50,27 @@ final class HintController {
     }
 
     var phase: Phase<ElementRef> { machine.phase }
+    /// The applied settings. A configure sent mid-session is not here until the session ends.
+    var settings: UserSettings { config.settings }
     var overlayPanelFrames: [AppKitRect] { overlay.panelFrames }
 
     /// The hotkey and the status item menu both land here.
     func triggerPressed() {
         send(.trigger(Self.gate()))
+    }
+
+    func configure(_ settings: UserSettings) {
+        send(.configure(settings))
+    }
+
+    /// Carbon fires a registered chord even while our own window is key, so recording a new chord
+    /// in Settings must release the current one first.
+    func suspendTrigger() {
+        hotKey.unregister()
+    }
+
+    func resumeTrigger() {
+        triggerRegistration = hotKey.register(config.trigger)
     }
 
     /// Run to completion. Events raised while effects run (a failed tap enable, a synchronous
@@ -105,6 +125,13 @@ final class HintController {
 
         case .alert(let alert):
             report(alert)
+
+        case .applySettings(let settings):
+            triggerRegistration = hotKey.register(settings.trigger)
+            keys.trigger = settings.trigger
+            keys.alphabet = settings.alphabet
+            config = config.applying(settings)
+            onSettingsApplied()
         }
     }
 

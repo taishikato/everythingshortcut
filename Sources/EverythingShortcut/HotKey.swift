@@ -3,8 +3,8 @@ import HintCore
 
 /// The global trigger through Carbon `RegisterEventHotKey`. Needs no permission.
 /// The single source of trigger presses: the event tap passes the chord through (`KeyRouting.route`).
-/// One registration per process. `register` replaces the previous chord, so a settings screen can
-/// change the trigger without restarting.
+/// One registration per process. `register` replaces the previous chord, so Settings changes the
+/// trigger without a restart.
 @MainActor
 final class HotKeyCenter {
     enum Registration: Equatable, Sendable {
@@ -23,10 +23,7 @@ final class HotKeyCenter {
             let status = InstallEventHandler(GetApplicationEventTarget(), hotKeyCallback, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
             guard status == noErr else { return .failed(status) }
         }
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
-        }
+        unregister()
         let status = RegisterEventHotKey(
             UInt32(hotKey.keyCode),
             Self.carbonModifiers(hotKey.modifiers),
@@ -36,6 +33,12 @@ final class HotKeyCenter {
             &hotKeyRef
         )
         return status == noErr ? .registered : .failed(status)
+    }
+
+    func unregister() {
+        guard let hotKeyRef else { return }
+        UnregisterEventHotKey(hotKeyRef)
+        self.hotKeyRef = nil
     }
 
     fileprivate func fire() { onPress() }

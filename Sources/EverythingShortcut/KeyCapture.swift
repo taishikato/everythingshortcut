@@ -17,8 +17,9 @@ final class KeyCapture {
     var onKey: (KeyInput) -> Void = { _ in }
     var onMouseDown: () -> Void = {}
     var onLost: () -> Void = {}
-    private let trigger: HotKey
-    private let alphabet: Alphabet
+    /// Changed only at idle, when the tap is disabled, so a session never sees two values.
+    var trigger: HotKey
+    var alphabet: Alphabet
     private let layout = KeyboardLayout()
     private var port: CFMachPort?
     private var isActive = false
