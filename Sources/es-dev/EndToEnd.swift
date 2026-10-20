@@ -131,9 +131,50 @@ struct EndToEnd {
             return (pressed.name == "back-visible" && raised, "\(pressed.detail), es-dev active before: \(wasActive), Back raised: \(raised)")
         }
 
+        await log.step("new settings apply without a restart and the old trigger stops working") {
+            try await checkSettingsChange(link: link, original: first)
+        }
+
         if let final = try? await link.status() { try? save(final, as: "final.json") }
         print("\(log.verified) of \(log.total) checks VERIFIED. Snapshots in \(outDirectory.path).")
         return log.verified == log.total ? 0 : 1
+    }
+
+    /// Switches to a chord and alphabet nobody uses, then restores the settings the run started with,
+    /// on the failure path too, and proves the restored trigger shows hints again.
+    private func checkSettingsChange(link: AppLink, original: SessionSnapshot) async throws -> (Bool, String) {
+        let chord = TriggerDump(keyCode: 38, modifiers: Modifiers([.control, .option, .command]).rawValue)   // ⌃⌥⌘J
+        let alphabet = "qwertyuiop"
+        let changed: (Bool, String)
+        do {
+            changed = try await settingsChanged(to: chord, alphabet: alphabet, from: original, link: link)
+        } catch {
+            changed = (false, "\(error)")
+            _ = try? await link.press([.escape], then: "idle")   // a configure sent mid-session would wait for idle
+        }
+        _ = try await link.configure(original.trigger, alphabet: original.alphabet)
+        let restored = try await link.press([.trigger], then: "showing")
+        _ = try await link.press([.escape], then: "idle")
+        let back = restored.trigger == original.trigger && restored.alphabet == original.alphabet && !restored.hints.isEmpty
+        return (changed.0 && back, "\(changed.1). restored: \(restored.hints.count) hints with the original trigger and alphabet \(restored.alphabet)")
+    }
+
+    private func settingsChanged(to chord: TriggerDump, alphabet: String, from original: SessionSnapshot, link: AppLink) async throws -> (Bool, String) {
+        let configured = try await link.configure(chord, alphabet: alphabet)
+        guard configured.trigger == chord, configured.alphabet == alphabet else {
+            return (false, "the snapshot still has trigger \(configured.trigger) and alphabet \(configured.alphabet)")
+        }
+        _ = try await link.press([.chord(keyCode: original.trigger.keyCode, modifiers: original.trigger.modifiers)])
+        try await Task.sleep(for: .milliseconds(300))
+        let afterOld = try await link.status()
+        guard afterOld.phase == "idle" else {
+            _ = try? await link.press([.escape], then: "idle")
+            return (false, "the old chord still started a session, phase \(afterOld.phase)")
+        }
+        let shown = try await link.press([.trigger], then: "showing")
+        _ = try await link.press([.escape], then: "idle")
+        let foreign = shown.hints.filter { !$0.label.allSatisfy(alphabet.contains) }.map(\.label)
+        return (!shown.hints.isEmpty && foreign.isEmpty, "old chord left the phase idle, new chord showed \(shown.hints.count) hints, labels outside '\(alphabet)': \(foreign)")
     }
 
     /// The window stack and visibility rules on the live desktop, with no AX call.
@@ -286,6 +327,13 @@ final class AppLink {
             try await Task.sleep(for: .milliseconds(20))
         }
         throw Failure.noReply(command)
+    }
+
+    /// Applies settings in the app without persisting them, and returns the snapshot taken right after.
+    func configure(_ trigger: TriggerDump, alphabet: String) async throws -> SessionSnapshot {
+        let reply = try await send(.configure(triggerKeyCode: trigger.keyCode, triggerModifiers: trigger.modifiers, alphabet: alphabet))
+        if let error = reply.error { throw Failure.rejected(error) }
+        return reply.snapshot
     }
 
     func status() async throws -> SessionSnapshot {
