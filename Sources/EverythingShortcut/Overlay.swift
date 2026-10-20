@@ -53,6 +53,104 @@ final class OverlayPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// A one-line notice in the badge style, centered near the top of the display that holds the mouse,
+/// just below the menu bar. It stays 2.5 s, fades out, and a new one replaces the current one.
+/// The panel sits at the overlay's level, so the scan treats it like the badge panels: transparent, never planned.
+@MainActor
+final class Notice {
+    private let panel = NoticePanel()
+    private var hiding: Task<Void, Never>?
+
+    func show(_ text: String) {
+        hiding?.cancel()
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
+        let size = panel.pill.show(text)
+        let top = screen.visibleFrame.maxY - 8
+        panel.setFrame(NSRect(x: (screen.frame.midX - size.width / 2).rounded(), y: (top - size.height).rounded(), width: size.width, height: size.height), display: true)
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        hiding = Task { [panel] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            await NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.3
+                panel.animator().alphaValue = 0
+            }
+            guard !Task.isCancelled else { return }
+            panel.orderOut(nil)
+        }
+    }
+}
+
+final class NoticePanel: NSPanel {
+    let pill = NoticePill()
+
+    init() {
+        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        level = .screenSaver
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        isReleasedWhenClosed = false
+        hidesOnDeactivate = false
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        contentView = pill
+    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+/// The pill: the badge gradient, border and dark text, with room around it for the shadow.
+final class NoticePill: NSView {
+    private static let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    private static let padding = NSSize(width: 14, height: 6)
+    private static let shadowRoom: CGFloat = 4
+    private var text = NSAttributedString()
+
+    override var isFlipped: Bool { true }
+
+    /// Sets the text and returns the panel size that fits it.
+    func show(_ string: String) -> NSSize {
+        text = NSAttributedString(string: string, attributes: [.font: Self.font, .foregroundColor: BadgeStyle.text])
+        needsDisplay = true
+        let size = text.size()
+        return NSSize(
+            width: ceil(size.width) + 2 * (Self.padding.width + Self.shadowRoom),
+            height: ceil(size.height) + 2 * (Self.padding.height + Self.shadowRoom)
+        )
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let rect = bounds.insetBy(dx: Self.shadowRoom, dy: Self.shadowRoom)
+        let radius = rect.height / 2
+        let shape = CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius, cornerHeight: radius, transform: nil)
+
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: -1), blur: 3, color: BadgeStyle.shadow.cgColor)
+        context.addPath(shape)
+        context.setFillColor(BadgeStyle.fillBottom.cgColor)
+        context.fillPath()
+        context.restoreGState()
+
+        context.saveGState()
+        context.addPath(shape)
+        context.clip()
+        context.drawLinearGradient(BadgeStyle.gradient, start: CGPoint(x: rect.minX, y: rect.minY), end: CGPoint(x: rect.minX, y: rect.maxY), options: [])
+        context.restoreGState()
+
+        context.addPath(shape)
+        context.setStrokeColor(BadgeStyle.border.cgColor)
+        context.setLineWidth(1)
+        context.strokePath()
+
+        text.draw(at: NSPoint(x: rect.minX + Self.padding.width, y: rect.minY + Self.padding.height))
+    }
+}
+
 /// Draws every badge of one display in one `draw(_:)`, with no view per badge.
 /// Flipped, so `Badge.origin` (display-local, y down) is the drawing coordinate with no conversion.
 ///

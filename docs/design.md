@@ -31,25 +31,30 @@ The click itself still reaches whatever is under the pointer.
 Backspace removes one letter.
 A letter that matches no label beeps and changes nothing.
 Hint mode does not start while a password field holds Secure Event Input, because typed labels would reach the field.
-It also does not start before Accessibility is granted, and it shows the system prompt instead.
+It beeps and shows a short notice near the top of the screen instead.
+It also does not start before Accessibility is allowed, and the app window opens at its Accessibility step instead.
 
-The keyboard icon in the menu bar opens a menu with five items.
-The first shows whether Accessibility is granted and opens the Accessibility pane of System Settings.
-The second shows the trigger chord and whether it registered.
-If another app already holds the chord, the menu says so, and "Show hints" is still there.
-"Show hints" starts hint mode from the menu, "Settings…" opens the Settings window, and "Quit" ends the app.
+The keyboard icon in the menu bar opens a menu.
+The first line says "Accessibility: allowed", or is "Allow Accessibility…", which opens the app window at that step.
+The second shows the shortcut and whether it registered.
+If another app already holds the chord, the menu says so, and "Show Labels" is still there.
+While Secure Event Input is on, a line says labels are paused.
+"Show Labels" starts hint mode from the menu, "Settings…" opens the app window, and "Quit" ends the app.
 
-The Settings window shows the app's name and version, the trigger chord, and a Status section.
-Status shows a green checkmark when Accessibility is granted, or an orange warning with a button to System Settings when it is not, and holds the "Launch at login" switch.
+The app has one window.
+It is first-run setup until setup was finished or skipped once, titled "Welcome to Everything Shortcut", and Settings after that, titled "Everything Shortcut Settings".
+Below the app's name and version it lists three steps: Accessibility, the shortcut, and a hands-on try.
+"First launch and the app window" below covers the steps.
+The window also holds the "Launch at login" switch and says where the menu bar icon is.
 The switch registers the app with `SMAppService.mainApp`, and when macOS waits for the user's approval it says so and offers to open Login Items.
 Opening the app again while it runs also shows the window, because macOS hides status items behind the notch when the menu bar is full.
 While the window is open the app is a regular app, with a Dock icon, a ⌘Tab entry and a menu bar of its own, because macOS never treats an `.accessory` app as the selected app.
 Closing the window makes it `.accessory` again.
-Click the trigger button and type a chord.
+Click the shortcut button and type a chord.
 The chord needs Control, Option or Command, and Escape and Delete cannot be the key, so cancel and Backspace always work.
 An invalid chord shows why under the button and recording continues, and Escape alone stops recording.
-The chord is on the button, so the Shortcut row says nothing while it works, and shows an orange line only when the chord failed to register or an enabled macOS shortcut takes it first.
-"Restore Defaults" brings back ⇧⌘Space.
+The chord is on the button, so the Shortcut row shows an orange line only when the chord failed to register or an enabled macOS shortcut takes it first.
+After setup, "Restore Defaults" brings back ⇧⌘Space.
 The badge letters are fixed to the home-row alphabet, because a user-chosen alphabet rarely beats it and easily makes every badge longer.
 Changes persist in `UserDefaults` and take effect without a restart, but never in the middle of a hint session.
 
@@ -158,20 +163,21 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/HintCore/RoleTable.swift` | `RoleRule`, `ChildrenSource`, `RoleTable.standard`, and the web search keys. |
 | `Sources/HintCore/Traversal.swift` | `ElementReader`, `NodeFacts`, and `Traversal.harvest`. |
 | `Sources/HintCore/WindowStack.swift` | `WindowSnapshot`, `RunningApps`, `ScanPlan`, `Surface`, and `Visibility`. |
+| `Sources/HintCore/Setup.swift` | `SetupFacts`, `SessionNote.of`, `Practice`, the `SetupGuide` reducer, and `MenuBarIcon.judge`. |
 | `Sources/HintCore/ActionPlan.swift` | `ClickPolicy` and `ActionPlan.make`. |
 | `Sources/HintCore/BadgeLayout.swift` | `BadgeLayout.layout(board, displays)` into display-local badges. |
 | `Sources/Desktop/Desktop.swift` | Window snapshot, displays, and running apps from CoreGraphics and NSWorkspace, with no AX. |
 | `Sources/AutomationWire/AutomationWire.swift` | DEBUG wire types shared by the app and es-dev. |
-| `Sources/EverythingShortcut/HintController.swift` | The single owner of session state. |
+| `Sources/EverythingShortcut/HintController.swift` | The single owner of session state, and the one read of Secure Event Input. |
 | `Sources/EverythingShortcut/Scan.swift` | `Scanner`, `ProbeQueues`, `AppProbe`, `ElementRef`, `AXReader`, and every AX IPC call. |
 | `Sources/EverythingShortcut/KeyCapture.swift` | The event tap and its C callback. |
-| `Sources/EverythingShortcut/HotKey.swift` | Carbon `RegisterEventHotKey` and `UnregisterEventHotKey`. |
+| `Sources/EverythingShortcut/HotKey.swift` | Carbon `RegisterEventHotKey` and `UnregisterEventHotKey`, and `ShortcutStatus`. |
 | `Sources/EverythingShortcut/KeyboardLayout.swift` | Key code to character through the ASCII-capable layout, and the name every chord is shown with. |
-| `Sources/EverythingShortcut/SettingsStore.swift` | `UserSettings` in `UserDefaults.standard`, read through `StoredSettings`. |
-| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController` (the AppKit window), `SettingsModel` (state, recorder, login item, apply), and the SwiftUI grouped form. |
-| `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, `BadgeStyle`. |
+| `Sources/EverythingShortcut/SettingsStore.swift` | `UserSettings` in `UserDefaults.standard`, read through `StoredSettings`, and the two setup flags. |
+| `Sources/EverythingShortcut/SettingsWindow.swift` | `SettingsWindowController` (the AppKit window, the trust watch, coming forward), `SettingsModel` (the guide, the one prompt call, recorder, login item, apply), and the SwiftUI checklist. |
+| `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, `BadgeStyle`, and the secure input `Notice`. |
 | `Sources/EverythingShortcut/Automation.swift` | The `#if DEBUG` hook that posts real keystrokes and writes `SessionSnapshot`. |
-| `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the trust prompt, and the status item menu. |
+| `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the launch decision, session note routing, and the status item menu. |
 | `Sources/es-dev/` | `windows`, `fixture` and `e2e`. |
 | `Tests/HintCoreTests/` | Tests over the pure core. |
 | `scripts/` | `check-invariants.sh`, `bundle.sh`, `e2e.sh`. |
@@ -204,6 +210,8 @@ Every core type is a value type and Sendable.
 - `StoredSettings` is the persisted form, two optional raw fields.
   `UserSettings(stored:)` parses it, so a missing or invalid trigger falls back to the standard trigger.
 - `RoleTable` maps role strings to `.hint`, `.container(ChildrenSource, clips:)`, or `.skip`, plus a fallback.
+- `SetupGuide` is the app window's checklist: the facts read from macOS, whether setup is complete, whether Accessibility was requested, and the `Practice` state.
+  Every row, the Return action and the launch decision derive from those four.
 
 The core is generic over `Target`.
 The app instantiates it with `ElementRef`, and tests use `Int`.
@@ -466,13 +474,78 @@ The letters are dark, bold, and uppercase, and the typed prefix is dimmed.
 A badge's top-left corner sits on its element's top-left corner, clamped inside the display.
 The canvas caches the attributed string and size of each label and typed count, so a keystroke redraws without new text layout.
 
+## First launch and the app window
+
+Setup is the first state of the one app window, not a second window.
+So `SettingsWindowController` stays the only owner of the activation policy, `SettingsModel` stays the only recorder, and reopening the app always lands on the one place that says what needs the user.
+
+### The checklist
+
+The window lists three steps, and the first step that is not done is current.
+
+1. Accessibility is done when `AXIsProcessTrusted()` says so.
+2. The shortcut is done when it registered and no enabled macOS shortcut takes it first.
+   A chord another app holds exclusively still reads done, because nothing can see it.
+3. Try it is done when the user typed the label on the Click Me button in the window, or when nobody asked for it.
+
+Steps the Mac can answer check themselves, so a working ⇧⌘Space is already checked on first launch.
+Return does the current step: Open System Settings, or start recording the shortcut, and Done once the first try succeeded.
+Escape only stops recording, because Escape also closes labels, and a stray one must not skip setup.
+A done step is a green checkmark, the current one an amber number, and a later one a gray number.
+No yellow badge with letters appears in the window, because on screen that means "type me".
+
+`SetupGuide` in `Sources/HintCore/Setup.swift` decides all of it.
+It is a reducer with a written transition table, like `HintMachine`, and `SetupTests` is its contract.
+The shell reads the facts in one function, `SettingsModel.facts(of:)`, on show, on key, after settings apply, and every 0.5 s while the window is open without Accessibility.
+When the grant lands, the guide emits `comeForward`, and the window orders itself above System Settings and requests activation, which macOS may refuse.
+The next step does not need focus, because the shortcut works from any app.
+
+### The try
+
+Click Me is an ordinary SwiftUI button in our own window, labeled by the real scan, whose job for our own pid runs on the main lane.
+Success is exact: the button's action ran while the controller was `performing` a label.
+That holds because our probe presses on the main thread, and SwiftUI runs the action inside the press, before `performed` returns the reducer to idle.
+`HintController` turns each reducer step into a `SessionNote` through `SessionNote.of`, and `HintMachine` does not change.
+The guide classifies how each try ends: labels closed, a label that clicked something else, a click without a label, or secure input.
+Nothing in the try step moves while labels are open, because its status line always holds two lines and every state draws the same views.
+After 8 s with no trigger at all, the step suggests that another app may hold the chord, because no API reports that.
+A new chord, or Try It on the shortcut row after setup, reopens the try.
+
+### When the window opens
+
+The window opens at launch until setup was finished or skipped once.
+After that it opens at launch only while Accessibility is off, so a login launch never nags about the shortcut.
+The status menu and the window still show a broken shortcut.
+A launch with `--automation` in DEBUG never opens it, so the e2e run starts with no window of ours on screen.
+A trigger refused for lack of Accessibility opens the window at that step.
+Closing the window in any way (Skip Setup, Done, Command-W, the close button) completes setup, stored once as `setupComplete`.
+Quitting does not, so a quit mid-setup shows setup again at the next launch.
+
+### The system prompt
+
+The Accessibility button is the only caller of `AXIsProcessTrustedWithOptions`, and `scripts/check-invariants.sh` fails on any other.
+macOS shows the prompt only while it has no entry for the app, and the call creates the entry that the pane lists.
+From the second request on, recorded as `accessibilityPrompted`, the prompt stays silent, so the button opens the pane as well.
+Neither launch nor a refused trigger shows the prompt any more.
+
+### The menu bar icon and secure input
+
+A new status item on a full menu bar can sit under the notch with its window still `isVisible` (measured at x 721, width 38, against the gap from 663 to 848).
+`MenuBarIcon.judge` calls the icon hidden when its window does not report `.visible` in `occlusionState`, or when it overlaps the notch gap of its screen.
+No visible icon has been measured, so every doubt reads hidden, whose copy (open the app again) is right either way.
+When the icon is visible, Show Me opens its menu.
+
+A trigger refused by Secure Event Input beeps and shows a notice in the badge style near the top of the display that holds the mouse, for 2.5 s.
+The app holding secure input is not named, because `kCGSSessionSecureInputPID` named the frontmost app, not the holder, in a measured run.
+The notice panel sits at the overlay's level, so the scan treats it like the badge panels.
+
 ## End-to-end verification without a trusted shell
 
 Verification has five layers, and only the last needs a person once.
 
 1. `swift test` covers the core.
    The tests cover prefix-free shortest labels for every count from 1 to 600, the full transition table including deferred settings, settings parsing and fallback, trigger validation, the observed window stack with its alpha-0 window and lock-screen shield, traversal IPC cost, frame pass-through, occlusion pruning, extras deduplication, the AppKit conversion, key routing, and badge layout.
-2. `scripts/check-invariants.sh` fails on any `@unchecked`, any import in `HintCore`, a role string outside `RoleTable.swift`, the AppKit conversion outside `Geometry.swift`, and AX IPC calls outside `Scan.swift`.
+2. `scripts/check-invariants.sh` fails on any `@unchecked`, any import in `HintCore`, a role string outside `RoleTable.swift`, the AppKit conversion outside `Geometry.swift`, AX IPC calls outside `Scan.swift`, and the system Accessibility prompt outside `SettingsWindow.swift`.
 3. `es-dev windows` prints the window stack, each window's exposure, and the scan plan, using the same `Desktop` reads and `ScanPlan` as the app.
    It needs no Accessibility.
    The unit tests feed native Swift values to the CGWindowList parser, so this live run is what proves the parser's casts through bridged `NSNumber` values.
@@ -572,6 +645,15 @@ Candidate B became the base, 27 points to 23, and the cross-judge and the orches
   It is what keeps AX handles out of the core and lets tests use `Int`.
 - We accept losing disclosure triangles inside outline rows, because `AXRow` is a leaf hint.
 - We accept Vimium's mixed-length labels, so a 100-hint screen has 7 one-letter labels and 93 two-letter labels.
+- We accept one window that is both setup and Settings, with a title that changes after the first close.
+  In exchange there is one activation-policy owner, one recorder, and one place that always says what needs the user.
+- We accept scanning our own window on the main thread, about 27 ms per scan while it is open.
+  In exchange the try has a real target, our own controls get labels, and badges for apps behind the window no longer draw over it.
+- We accept no labels on our own menu bar and status item, in exchange for never running a menu's tracking loop inside a press on main.
+- We accept that closing the window counts as skipping, and that a quit before closing shows setup again.
+  In exchange the title and footer never change while the user reads them, and anything that still matters reopens the window by itself.
+- We accept a timed nudge for a chord another app holds, because nothing else can see one.
+- We accept that coming forward may not take focus, in exchange for not depending on activation that macOS may refuse.
 
 ## Alternatives considered
 

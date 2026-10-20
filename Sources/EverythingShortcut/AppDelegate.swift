@@ -20,13 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let config = HintConfig.standard.applying(SettingsStore.load())
         Scanner.setProcessMessagingTimeout(config.axMessagingTimeout)
-        if !AXIsProcessTrusted() { HintController.promptForAccessibility() }
 
         let controller = HintController(config: config)
         controller.onSettingsApplied = { [weak self] in self?.settingsWindow?.refresh() }
+        controller.onSession = { [weak self] in self?.sessionNote($0) }
         self.controller = controller
         statusItem = makeStatusItem()
         NSApp.mainMenu = mainMenu()
+
+        let guide = SetupGuide(facts: SettingsModel.facts(of: controller), isComplete: SettingsStore.setupComplete)
+        if !launchedForAutomation, guide.opensAtLaunch { openSettings() }
 
         #if DEBUG
         assert(CGWindowLevelForKey(.dockWindow) == Int32(WindowLayer.dock))
@@ -34,12 +37,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assert(CGWindowLevelForKey(.statusWindow) == Int32(WindowLayer.status))
         assert(CGWindowLevelForKey(.screenSaverWindow) == Int32(WindowLayer.overlay))
         assert(NSWindow.Level.screenSaver.rawValue == WindowLayer.overlay)
-        if CommandLine.arguments.contains(AutomationChannel.launchArgument) {
+        if launchedForAutomation {
             let server = AutomationServer(controller: controller)
             server.start()
             automation = server
         }
         #endif
+    }
+
+    /// A launch for automation is never a first run, so the e2e run starts with no window of ours on screen.
+    private var launchedForAutomation: Bool {
+        #if DEBUG
+        CommandLine.arguments.contains(AutomationChannel.launchArgument)
+        #else
+        false
+        #endif
+    }
+
+    /// A trigger refused for lack of Accessibility opens the window at that row, in place of the system
+    /// prompt, which macOS shows only once anyway.
+    private func sessionNote(_ note: SessionNote) {
+        if note == .blocked(.needsAccessibility) { openSettings() }
+        settingsWindow?.note(note)
     }
 
     private func makeStatusItem() -> NSStatusItem {
@@ -52,17 +71,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    /// Rebuilt on every open, so the Accessibility and trigger lines are never stale.
+    /// Rebuilt on every open, so the Accessibility, shortcut and secure input lines are never stale.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         guard let controller else { return }
         let chord = layout.name(of: controller.settings.trigger)
 
-        menu.addItem(info(AXIsProcessTrusted() ? "Accessibility: granted" : "Accessibility: not granted"))
-        menu.addItem(action("Open Accessibility Settings…", #selector(openAccessibilitySettings)))
-        menu.addItem(.separator())
-        menu.addItem(info("Trigger \(chord): \(HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger).text)"))
-        menu.addItem(action("Show hints", #selector(showHints)))
+        menu.addItem(AXIsProcessTrusted() ? info("Accessibility: allowed") : action("Allow Accessibility…", #selector(openSettings)))
+        menu.addItem(info("Shortcut \(chord): \(HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger).menuText)"))
+        if HintController.secureInputActive { menu.addItem(info("Labels paused: secure input is on")) }
+        menu.addItem(action("Show Labels", #selector(showHints)))
         menu.addItem(.separator())
         menu.addItem(action("Settings…", #selector(openSettings), key: ","))
         menu.addItem(action("Quit Everything Shortcut", #selector(NSApplication.terminate(_:)), target: NSApp, key: "q"))
@@ -72,14 +90,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller?.triggerPressed()
     }
 
-    /// Opening the app again while it runs shows Settings. The status item is the only other way in,
+    /// Opening the app again while it runs shows the window. The status item is the only other way in,
     /// and macOS hides status items behind the notch when the menu bar is full.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         openSettings()
         return false
     }
 
-    /// Shown only while Settings makes the app a regular app, so ⌘, ⌘W, ⌘H and ⌘Q work as in any app.
+    /// Shown only while the window makes the app a regular app, so ⌘, ⌘W, ⌘H and ⌘Q work as in any app.
     private func mainMenu() -> NSMenu {
         let app = NSMenu()
         app.addItem(action("Settings…", #selector(openSettings), key: ","))
@@ -99,14 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openSettings() {
-        guard let controller else { return }
-        let window = settingsWindow ?? SettingsWindowController(controller: controller)
+        guard let controller, let statusItem else { return }
+        let window = settingsWindow ?? SettingsWindowController(controller: controller, statusItem: statusItem)
         settingsWindow = window
         window.show()
-    }
-
-    @objc private func openAccessibilitySettings() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
 
     private func info(_ title: String) -> NSMenuItem {

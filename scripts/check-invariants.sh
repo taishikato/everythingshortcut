@@ -45,4 +45,7 @@ check "the AppKit flip appears only in Geometry.swift" \
 check "AX IPC calls appear only in Scan.swift" \
   "$(code_hits 'AXUIElement(Copy[A-Za-z]*|PerformAction|Set[A-Za-z]*)[[:space:]]*\(' Sources/EverythingShortcut/Scan.swift)"
 
+check "the system Accessibility prompt is called only from SettingsWindow.swift" \
+  "$(code_hits 'AXIsProcessTrustedWithOptions' Sources/EverythingShortcut/SettingsWindow.swift)"
+
 exit $fail

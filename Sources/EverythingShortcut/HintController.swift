@@ -18,6 +18,7 @@ final class HintController {
     private let hotKey: HotKeyCenter
     private let keys: KeyCapture
     private let overlay = Overlay()
+    private let notice = Notice()
     private let scanner: Scanner
     private var scanTask: Task<Void, Never>?
     private var pending: [Event<ElementRef>] = []
@@ -30,6 +31,9 @@ final class HintController {
 
     /// Runs after new settings took effect, so the settings window can redraw.
     var onSettingsApplied: () -> Void = {}
+
+    /// What the app window learns about sessions. Called once per drained event that starts, ends or blocks one.
+    var onSession: (SessionNote) -> Void = { _ in }
 
     /// Diagnostics for the log and the DEBUG automation snapshot. Not session state.
     private(set) var lastScanStats: ScanStats?
@@ -82,7 +86,9 @@ final class HintController {
         defer { draining = false }
         while !pending.isEmpty {
             let next = pending.removeFirst()
+            let before = machine.phase
             for effect in machine.send(next) { run(effect) }
+            if let note = SessionNote.of(next, from: before, to: machine.phase) { onSession(note) }
         }
     }
 
@@ -137,22 +143,24 @@ final class HintController {
     /// Facts the reducer needs to accept a trigger. Both are cheap local calls.
     private static func gate() -> TriggerGate {
         if !AXIsProcessTrusted() { return .blocked(.needsAccessibility) }
-        if IsSecureEventInputEnabled() { return .blocked(.secureInputActive) }
+        if secureInputActive { return .blocked(.secureInputActive) }
         return .ready
     }
 
-    /// Shows the system Accessibility prompt. The literal is the value of `kAXTrustedCheckOptionPrompt`,
-    /// a C global that Swift 6 rejects as shared mutable state.
-    static func promptForAccessibility() {
-        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-    }
+    /// Secure Event Input, read in one place. The gate refuses a trigger on it, and the status menu says so.
+    /// The app that holds it is never named: the only source (`kCGSSessionSecureInputPID`) names the
+    /// frontmost app instead (measured with a CLI process holding it while Chrome was frontmost).
+    static var secureInputActive: Bool { IsSecureEventInputEnabled() }
 
     private func report(_ alert: Alert) {
         log.notice("alert \(String(describing: alert), privacy: .public)")
         switch alert {
         case .needsAccessibility:
-            Self.promptForAccessibility()
-        case .secureInputActive, .noHints, .noMatch, .keyCaptureLost:
+            break   // AppDelegate opens the app window at Accessibility through `onSession`.
+        case .secureInputActive:
+            NSSound.beep()
+            notice.show("Labels can't open while a password field or Secure Keyboard Entry is on.")
+        case .noHints, .noMatch, .keyCaptureLost:
             NSSound.beep()
         }
     }

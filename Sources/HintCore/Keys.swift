@@ -77,7 +77,7 @@ public enum TriggerError: Error, Hashable, Sendable {
     public var message: String {
         switch self {
         case .needsModifier: "Hold ⌃, ⌥ or ⌘ with the key."
-        case .reservedKey: "Escape and Delete are reserved for hint mode."
+        case .reservedKey: "Escape and Delete can't be the shortcut. Labels use them."
         }
     }
 }

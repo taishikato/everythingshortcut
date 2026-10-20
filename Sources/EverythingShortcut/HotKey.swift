@@ -16,13 +16,12 @@ final class HotKeyCenter {
 
     var onPress: () -> Void = {}
 
-    /// What the menu and Settings say about the trigger. `text` is lowercase so either can lead with it.
-    static func status(_ registration: Registration, for hotKey: HotKey) -> (text: String, works: Bool) {
-        if SystemShortcuts.enabled().contains(hotKey) { return ("not usable, a macOS shortcut takes it first", false) }
+    /// What the status menu and the app window say about the applied trigger.
+    static func status(_ registration: Registration, for hotKey: HotKey) -> ShortcutStatus {
+        if SystemShortcuts.enabled().contains(hotKey) { return .takenByMacOS }
         return switch registration {
-        case .registered: ("registered", true)
-        case .failed(let status) where status == eventHotKeyExistsErr: ("not registered, the chord is already registered", false)
-        case .failed(let status): ("not registered (error \(status))", false)
+        case .registered: .registered
+        case .failed(let status): .notRegistered(status)
         }
     }
     private var hotKeyRef: EventHotKeyRef?
@@ -61,6 +60,38 @@ final class HotKeyCenter {
         if m.contains(.option) { flags |= optionKey }
         if m.contains(.control) { flags |= controlKey }
         return UInt32(flags)
+    }
+}
+
+/// The applied trigger as the user should hear about it. The status menu and the app window switch over
+/// the same cases.
+enum ShortcutStatus: Equatable, Sendable {
+    case registered
+    /// An enabled macOS shortcut takes the chord first, so it never reaches us.
+    case takenByMacOS
+    case notRegistered(OSStatus)
+
+    /// A chord another app holds exclusively still reads `.registered` (docs/design.md).
+    var works: Bool { self == .registered }
+
+    /// After "Shortcut ⇧⌘Space: " in the status menu.
+    var menuText: String {
+        switch self {
+        case .registered: "registered"
+        case .takenByMacOS: "taken by a macOS shortcut"
+        case .notRegistered(let status) where status == eventHotKeyExistsErr: "not registered, the chord is already registered"
+        case .notRegistered(let status): "not registered (error \(status))"
+        }
+    }
+
+    /// The orange line under the shortcut in the app window. Nil when it works.
+    func problem(chord: String) -> String? {
+        switch self {
+        case .registered: nil
+        case .takenByMacOS: "A macOS shortcut already uses \(chord), so it never reaches the app. Pick another one."
+        case .notRegistered(let status) where status == eventHotKeyExistsErr: "Another app already registered \(chord). Pick another one."
+        case .notRegistered(let status): "macOS didn't accept \(chord) (error \(status)). Pick another one."
+        }
     }
 }
 
