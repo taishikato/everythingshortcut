@@ -40,7 +40,7 @@ If another app already holds the chord, the menu says so, and "Show hints" is st
 "Show hints" starts hint mode from the menu, "Settings…" opens the Settings window, and "Quit" ends the app.
 
 The Settings window shows the app's name and version, the trigger chord, and a Status section.
-Status shows whether Accessibility is granted with a green or orange dot, and holds the "Launch at login" switch.
+Status shows a green checkmark when Accessibility is granted, or an orange warning with a button to System Settings when it is not, and holds the "Launch at login" switch.
 The switch registers the app with `SMAppService.mainApp`, and when macOS waits for the user's approval it says so and offers to open Login Items.
 Opening the app again while it runs also shows the window, because macOS hides status items behind the notch when the menu bar is full.
 Click the trigger button and type a chord.

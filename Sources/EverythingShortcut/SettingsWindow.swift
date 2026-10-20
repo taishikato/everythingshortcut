@@ -214,10 +214,12 @@ struct SettingsView: View {
             Section("Status") {
                 LabeledContent("Accessibility") {
                     if model.accessibilityGranted {
-                        StatusDot(text: "Granted", color: .green)
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .accessibilityLabel("Granted")
                     } else {
                         HStack {
-                            StatusDot(text: "Not granted", color: .orange)
+                            Label("Not granted", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                             Button("Open Settings…", action: model.openAccessibilitySettings)
                         }
                     }
@@ -243,18 +245,6 @@ struct SettingsView: View {
     }
 
     private func sentence(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
-}
-
-private struct StatusDot: View {
-    let text: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(text).foregroundStyle(.secondary)
-        }
-    }
 }
 
 /// A yellow badge with a keyboard, drawn like the hints on screen. The app bundle has no icon file.
