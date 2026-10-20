@@ -74,9 +74,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
     }
 
     /// Redraws from the applied settings. Called on show and after every apply.
+    /// An alphabet edit in progress is kept, so recording a chord mid-edit does not discard it.
     func refresh() {
         refreshTrigger()
-        alphabetField.stringValue = controller.settings.alphabet.string
+        guard alphabetField.currentEditor() == nil else { return }
+        showAlphabet(controller.settings.alphabet)
+    }
+
+    private func showAlphabet(_ alphabet: Alphabet) {
+        alphabetField.stringValue = alphabet.string
         alphabetError.stringValue = ""
     }
 
@@ -98,6 +104,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSTextFieldDel
 
     @objc private func restoreDefaults() {
         stopRecording()
+        alphabetField.abortEditing()
+        showAlphabet(UserSettings.standard.alphabet)
         apply(.standard)
     }
 
