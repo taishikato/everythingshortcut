@@ -68,7 +68,11 @@ final class Notice {
         let size = panel.pill.show(text)
         let top = screen.visibleFrame.maxY - 8
         panel.setFrame(NSRect(x: (screen.frame.midX - size.width / 2).rounded(), y: (top - size.height).rounded(), width: size.width, height: size.height), display: true)
-        panel.alphaValue = 1
+        // A zero-length group replaces a fade still running from the notice this one replaces.
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0
+            panel.animator().alphaValue = 1
+        }, completionHandler: nil)
         panel.orderFrontRegardless()
         hiding = Task { [panel] in
             try? await Task.sleep(for: .seconds(2.5))

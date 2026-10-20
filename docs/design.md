@@ -277,6 +277,7 @@ Tracing that flow takes three files: `HintController.swift`, `HintMachine.swift`
 It hides the snapshot, the plan, the queue lanes, the per-app fan-out, AX error classification, web accessibility enablement, and occlusion.
 `AppProbe` exposes `scan` and `perform`, and `ElementRef.perform` is the only way to act on an element.
 `HintController` exposes `triggerPressed`, `send`, `configure`, `suspendTrigger` and `resumeTrigger`, the applied settings and the trigger registration, and read-only diagnostics for the DEBUG hook.
+It also exposes `onSession`, one `SessionNote` per drained event that starts, ends or blocks a session, and `secureInputActive`, the one read of Secure Event Input.
 No AX or CG type appears on any of those signatures.
 
 ## AXUIElement across threads under Swift 6
