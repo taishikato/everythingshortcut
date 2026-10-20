@@ -55,6 +55,7 @@ scripts/e2e.sh
 
 The script bundles the DEBUG app, starts it with `--automation`, and runs `es-dev e2e` against two fixture windows.
 It prints `VERIFIED` or `NOT VERIFIED` for each check and saves a screenshot of the badges under `build/e2e/`.
+Run it unlocked, on a desktop Space, because a full-screen Space hides the fixture windows, and es-dev stops early with exit 2 when it sees either.
 The automation hook exists only in DEBUG builds.
 
 ## Read more

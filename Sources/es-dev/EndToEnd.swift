@@ -11,12 +11,18 @@ struct EndToEnd {
     let fixture: Fixture
     let outDirectory: URL
 
+    private static let appBundleID = "com.taishikato.EverythingShortcut"
     private static let grantStep = "Grant Accessibility to build/EverythingShortcut.app in System Settings > Privacy & Security > Accessibility, then rerun scripts/e2e.sh."
 
     func run() async -> Int32 {
         try? FileManager.default.createDirectory(at: outDirectory, withIntermediateDirectories: true)
         let link = AppLink(replyDirectory: outDirectory)
         var log = CheckLog()
+
+        if let blocked = await screenBlocker() {
+            log.record("the fixture windows are on screen", false, blocked)
+            return 2
+        }
 
         guard let first = try? await link.waitForApp() else {
             log.record("the app answers over AutomationWire within 10 s", false, "no reply. Is build/EverythingShortcut.app running with --automation?")
@@ -135,6 +141,10 @@ struct EndToEnd {
             try await checkSettingsChange(link: link, original: first)
         }
 
+        await log.step("a relaunch loads stored settings and replaces only the invalid one with its default") {
+            try await checkStoredSettingsLoad(link: link, original: first)
+        }
+
         if let final = try? await link.status() { try? save(final, as: "final.json") }
         print("\(log.verified) of \(log.total) checks VERIFIED. Snapshots in \(outDirectory.path).")
         return log.verified == log.total ? 0 : 1
@@ -177,6 +187,65 @@ struct EndToEnd {
         return (!shown.hints.isEmpty && foreign.isEmpty, "old chord left the phase idle, new chord showed \(shown.hints.count) hints, labels outside '\(alphabet)': \(foreign)")
     }
 
+    /// Relaunches the app with stored settings in the argument domain, which UserDefaults reads before
+    /// the user's own settings and never writes, so the run leaves the user's settings untouched.
+    /// The stored trigger is valid and the stored alphabet is not, so one launch proves the parse and the
+    /// per-field fallback. Values are XML plist fragments, because a bare "38" arrives as a string.
+    private func checkStoredSettingsLoad(link: AppLink, original: SessionSnapshot) async throws -> (Bool, String) {
+        let chord = TriggerDump(keyCode: 38, modifiers: Modifiers([.control, .option, .command]).rawValue)   // ⌃⌥⌘J
+        let stored = [
+            "-triggerKeyCode", "<integer>\(chord.keyCode)</integer>",
+            "-triggerModifiers", "<integer>\(chord.modifiers)</integer>",
+            "-labelAlphabet", "a1",
+        ]
+        try await relaunchApp(arguments: [AutomationChannel.launchArgument] + stored)
+        let loaded = try await link.waitForApp()
+        let shown = try await link.press([.trigger], then: "showing")
+        _ = try await link.press([.escape], then: "idle")
+        try await relaunchApp(arguments: [AutomationChannel.launchArgument])
+        let back = try await link.waitForApp()
+        let ok = loaded.trigger == chord && loaded.alphabet == Alphabet.homeRow.string && !shown.hints.isEmpty
+            && back.trigger == original.trigger && back.alphabet == original.alphabet
+        return (ok, "loaded trigger \(loaded.trigger) and alphabet \(loaded.alphabet) from a stored 'a1', \(shown.hints.count) hints on the stored chord, plain relaunch back to \(back.trigger) and \(back.alphabet)")
+    }
+
+    private struct RelaunchFailed: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    private func relaunchApp(arguments: [String]) async throws {
+        guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: Self.appBundleID).first,
+              let url = running.bundleURL
+        else { throw RelaunchFailed(description: "the app is not running") }
+        running.terminate()
+        let until = ContinuousClock.now + .seconds(5)
+        while !running.isTerminated {
+            guard ContinuousClock.now < until else { throw RelaunchFailed(description: "the app did not quit within 5 s") }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        configuration.activates = false
+        configuration.arguments = arguments
+        _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+
+    /// Why the fixture cannot be seen, or nil. A locked screen or a full-screen Space hides the fixture,
+    /// and every later check would then fail for a reason that has nothing to do with the app.
+    private func screenBlocker() async -> String? {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        if session?["CGSSessionScreenIsLocked"] as? Bool == true {
+            return "the screen is locked. Unlock it, then rerun scripts/e2e.sh."
+        }
+        let ids = [fixture.back, fixture.front].map { WindowID(UInt32($0.windowNumber)) }
+        for _ in 0..<20 {
+            let listed = Set(Desktop.windowSnapshot().windows.map(\.id))
+            if ids.allSatisfy(listed.contains) { return nil }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return "the fixture windows are not on screen after 2 s, which a full-screen Space causes. Switch to a desktop Space, then rerun scripts/e2e.sh."
+    }
+
     /// The window stack and visibility rules on the live desktop, with no AX call.
     private func checkPlanWithoutAX(_ log: inout CheckLog) {
         let snapshot = Desktop.windowSnapshot()
@@ -194,7 +263,7 @@ struct EndToEnd {
 
     /// The app's pid, which its own scan never plans, so exposure is judged as the app judges it.
     private var appPID: PID {
-        NSRunningApplication.runningApplications(withBundleIdentifier: "com.taishikato.EverythingShortcut").first
+        NSRunningApplication.runningApplications(withBundleIdentifier: Self.appBundleID).first
             .map { PID($0.processIdentifier) } ?? PID(-1)
     }
 
