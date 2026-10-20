@@ -7,6 +7,7 @@ import HintCore
 ///     es-dev windows              window stack, exposure and scan plan as the app would compute them
 ///     es-dev fixture              show the fixture windows until killed, printing every press
 ///     es-dev e2e [--out <dir>]    host the fixture and drive the running DEBUG app through AutomationWire
+///     es-dev icon <dir>           write the app icon as <dir>, an .iconset that scripts/bundle.sh turns into AppIcon.icns
 setvbuf(stdout, nil, _IOLBF, 0)
 let arguments = Array(CommandLine.arguments.dropFirst())
 
@@ -32,7 +33,15 @@ case "e2e":
         exit(await EndToEnd(fixture: fixture, outDirectory: URL(fileURLWithPath: out)).run())
     }
     NSApplication.shared.run()
+case "icon" where arguments.count == 2:
+    do {
+        try IconSet.write(to: URL(fileURLWithPath: arguments[1]))
+        exit(0)
+    } catch {
+        FileHandle.standardError.write(Data("es-dev icon: \(error)\n".utf8))
+        exit(1)
+    }
 default:
-    FileHandle.standardError.write(Data("usage: es-dev windows | fixture | e2e [--out <dir>]\n".utf8))
+    FileHandle.standardError.write(Data("usage: es-dev windows | fixture | e2e [--out <dir>] | icon <dir>\n".utf8))
     exit(64)
 }

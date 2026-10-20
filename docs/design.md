@@ -65,7 +65,8 @@ swift test                         # the pure core, no permissions
 scripts/check-invariants.sh        # single-source-of-truth rules, fails on a violation
 .build/debug/es-dev windows        # the AX-free half of a scan on the live desktop, from any shell
 .build/debug/es-dev fixture        # the e2e fixture windows, each press printed with NSApp.isActive
-scripts/bundle.sh debug            # build/EverythingShortcut.app, signed with the stable identity
+.build/debug/es-dev icon <dir>     # the app icon as an .iconset, the one bundle.sh ships
+scripts/bundle.sh debug            # build/EverythingShortcut.app with that icon, signed with the stable identity
 scripts/e2e.sh                     # real hotkey, real tap, real AX press against the fixture
 ```
 
@@ -179,7 +180,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/EverythingShortcut/Overlay.swift` | One panel per display, `BadgeCanvas`, and the secure input `Notice`. |
 | `Sources/EverythingShortcut/Automation.swift` | The `#if DEBUG` hook that posts real keystrokes and writes `SessionSnapshot`. |
 | `Sources/EverythingShortcut/AppDelegate.swift` | Process wiring, the persisted settings at launch, the launch decision, session note routing, and the status item menu. |
-| `Sources/es-dev/` | `windows`, `fixture` and `e2e`. |
+| `Sources/es-dev/` | `windows`, `fixture`, `e2e`, and `icon`. |
 | `Tests/HintCoreTests/` | Tests over the pure core. |
 | `scripts/` | `check-invariants.sh`, `bundle.sh`, `e2e.sh`. |
 

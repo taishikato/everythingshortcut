@@ -23,6 +23,7 @@ scripts/bundle.sh debug      # or release
 ```
 
 `scripts/bundle.sh` writes `build/EverythingShortcut.app` and signs it last.
+Its icon comes from `es-dev icon`, which draws the app icon from the badge code on every build.
 
 ## Run
 

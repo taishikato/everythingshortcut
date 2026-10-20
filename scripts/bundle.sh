@@ -12,16 +12,21 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/EverythingShortcut.app"
 
 swift build --package-path "$ROOT" -c "$CONFIG" --product EverythingShortcut >&2
-BIN="$(swift build --package-path "$ROOT" -c "$CONFIG" --show-bin-path)/EverythingShortcut"
+swift build --package-path "$ROOT" -c "$CONFIG" --product es-dev >&2
+BIN_DIR="$(swift build --package-path "$ROOT" -c "$CONFIG" --show-bin-path)"
 
 mkdir -p "$ROOT/build"
 STAGE="$(mktemp -d "$ROOT/build/.stage.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
-mkdir -p "$STAGE/EverythingShortcut.app/Contents/MacOS"
-cp "$BIN" "$STAGE/EverythingShortcut.app/Contents/MacOS/EverythingShortcut"
+mkdir -p "$STAGE/EverythingShortcut.app/Contents/MacOS" "$STAGE/EverythingShortcut.app/Contents/Resources"
+cp "$BIN_DIR/EverythingShortcut" "$STAGE/EverythingShortcut.app/Contents/MacOS/EverythingShortcut"
 cp "$ROOT/Support/Info.plist" "$STAGE/EverythingShortcut.app/Contents/Info.plist"
 plutil -lint "$STAGE/EverythingShortcut.app/Contents/Info.plist" >&2
+
+# es-dev draws the icon from the badge code on every build, so the bundle's icon cannot drift from the code.
+"$BIN_DIR/es-dev" icon "$STAGE/AppIcon.iconset" >&2
+iconutil -c icns "$STAGE/AppIcon.iconset" -o "$STAGE/EverythingShortcut.app/Contents/Resources/AppIcon.icns"
 
 # Signing comes last, because any change to the bundle after it breaks the seal.
 codesign --force --timestamp=none --sign "$IDENTITY" "$STAGE/EverythingShortcut.app" >&2

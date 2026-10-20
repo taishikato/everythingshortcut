@@ -56,14 +56,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         model.refresh()
         window.title = model.guide.isComplete ? "Everything Shortcut Settings" : "Welcome to Everything Shortcut"
         NSApp.setActivationPolicy(.regular)
-        NSApp.applicationIconImage = dockIcon
         window.makeKeyAndOrderFront(nil)
         comeForward()
         watchTrust()
     }
-
-    /// The bundle has no icon file, so the Dock shows the same badge the window's card draws.
-    private lazy var dockIcon = ImageRenderer(content: DockIcon()).nsImage
 
     func refresh() { model.refresh() }
 
@@ -616,11 +612,6 @@ private struct MenuBarRow: View {
             .fixedSize(horizontal: false, vertical: true)
         }
     }
-}
-
-/// The badge on the Dock's 1024-point icon grid, which leaves a margin around the shape.
-private struct DockIcon: View {
-    var body: some View { AppIcon(size: 824).frame(width: 1024, height: 1024) }
 }
 
 extension Modifiers {
