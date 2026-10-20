@@ -180,6 +180,20 @@ struct TraversalTests {
         #expect(t.calls.contains("search 1") && t.calls.contains("children 1"))
     }
 
+    @Test func everythingFoundUnderAWebAreaIsWebContent() {
+        let t = FakeTree()
+        t.add(1, "AXWindow", 0, 0, 500, 500, children: [2, 3, 4])
+        t.add(2, "AXButton", 0, 0, 50, 20)
+        t.add(3, "AXWebArea", 0, 100, 500, 100)
+        t.nodes[3]?.search = [5]
+        t.add(4, "AXWebArea", 0, 200, 500, 300, children: [6])
+        t.add(5, "AXLink", 0, 100, 50, 20)
+        t.add(6, "AXGroup", 0, 200, 500, 100, children: [7])
+        t.add(7, "AXLink", 0, 200, 50, 20)
+        let content = Dictionary(uniqueKeysWithValues: t.harvest().found.map { ($0.element, $0.content) })
+        #expect(content == [2: .native, 5: .web, 7: .web], "search results and fallback descendants are web, the sibling button is native")
+    }
+
     @Test func eachSearchedWebAreaReportsItsRawResultCount() {
         let t = FakeTree()
         t.add(1, "AXWindow", 0, 0, 500, 500, children: [2, 3, 4])

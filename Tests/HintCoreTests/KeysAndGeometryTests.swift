@@ -53,16 +53,21 @@ struct ActionPlanTests {
     private let hit = GlobalPoint(x: 5, y: 5)
 
     @Test func pressWhenAdvertisedRaisesWindowsOnly() {
-        let window = ActionPlan.make(policy: .pressWhenAdvertised, surface: .window(WindowID(3)), hitPoint: hit, advertisedActions: ["AXPress"])
+        let window = ActionPlan.make(policy: .pressWhenAdvertised, surface: .window(WindowID(3)), hitPoint: hit, advertisedActions: ["AXPress"], content: .native)
         #expect(window == ActionPlan(raiseWindow: true, act: .press(fallback: hit)))
-        let dock = ActionPlan.make(policy: .pressWhenAdvertised, surface: .dock, hitPoint: hit, advertisedActions: ["AXPress"])
+        let dock = ActionPlan.make(policy: .pressWhenAdvertised, surface: .dock, hitPoint: hit, advertisedActions: ["AXPress"], content: .native)
         #expect(dock == ActionPlan(raiseWindow: false, act: .press(fallback: hit)))
     }
 
     @Test func clickWhenPressIsMissingOrPolicySaysSo() {
-        let field = ActionPlan.make(policy: .pressWhenAdvertised, surface: .window(WindowID(3)), hitPoint: hit, advertisedActions: ["AXConfirm"])
+        let field = ActionPlan.make(policy: .pressWhenAdvertised, surface: .window(WindowID(3)), hitPoint: hit, advertisedActions: ["AXConfirm"], content: .native)
         #expect(field.act == .click(hit))
-        let forced = ActionPlan.make(policy: .alwaysClick, surface: .menuBar, hitPoint: hit, advertisedActions: ["AXPress"])
+        let forced = ActionPlan.make(policy: .alwaysClick, surface: .menuBar, hitPoint: hit, advertisedActions: ["AXPress"], content: .native)
         #expect(forced == ActionPlan(raiseWindow: false, act: .click(hit)))
+    }
+
+    @Test func webContentIsClickedEvenWhenPressIsAdvertised() {
+        let link = ActionPlan.make(policy: .pressWhenAdvertised, surface: .window(WindowID(3)), hitPoint: hit, advertisedActions: ["AXPress"], content: .web)
+        #expect(link == ActionPlan(raiseWindow: true, act: .click(hit)))
     }
 }

@@ -41,11 +41,19 @@ public enum StopReason: Hashable, Sendable {
     case nodeLimit
 }
 
+/// Whether an element came from inside a web area, meaning under a container whose rule reads
+/// `ChildrenSource.searchPredicate`. The action planner activates the two kinds differently.
+public enum ElementContent: Hashable, Sendable {
+    case native
+    case web
+}
+
 public struct Found<Element> {
     public let element: Element
     public let role: String
     /// The node's frame clipped by every clipping ancestor and the root clip. Never empty.
     public let visibleFrame: GlobalRect
+    public let content: ElementContent
 }
 
 public struct Harvest<Element> {
@@ -72,6 +80,8 @@ public enum Traversal {
     ///   cut short by the budget or node limit still returns the shallow controls.
     /// - `shouldStop` is checked before every IPC. Cancellation and the scan deadline both feed it.
     /// - `.unresponsive` from any call ends the walk with the partial result.
+    /// - Everything found under a `.searchPredicate` container is `.web`, whether it came from the
+    ///   search or from the `.children` fallback. Everything else is `.native`.
     public static func harvest<R: ElementReader>(
         root: R.Element,
         clip: GlobalRect,
@@ -82,7 +92,7 @@ public enum Traversal {
         shouldStop: () -> Bool
     ) -> Harvest<R.Element> {
         var result = Harvest<R.Element>()
-        var queue: [(element: R.Element, clip: GlobalRect)] = [(root, clip)]
+        var queue: [(element: R.Element, clip: GlobalRect, content: ElementContent)] = [(root, clip, .native)]
         var head = 0
 
         /// Nil skips the node and its subtree: the read failed, the frame lies outside `clip`, or a
@@ -121,7 +131,7 @@ public enum Traversal {
         }
 
         while head < queue.count, result.stop == nil {
-            let (element, clip) = queue[head]
+            let (element, clip, content) = queue[head]
             head += 1
             guard let (facts, placement) = read(element, within: clip) else { continue }
 
@@ -130,10 +140,11 @@ public enum Traversal {
                 continue
             case .hint:
                 if facts.isEnabled, case .visible(let frame) = placement {
-                    result.found.append(Found(element: element, role: facts.role, visibleFrame: frame))
+                    result.found.append(Found(element: element, role: facts.role, visibleFrame: frame, content: content))
                 }
             case .container(let source, let clips):
                 let childClip = if clips, case .visible(let frame) = placement { frame } else { clip }
+                let kidContent: ElementContent = if case .searchPredicate = source { .web } else { content }
                 guard let (kids, terminal) = children(of: element, from: source) else { continue }
                 if terminal {
                     result.webAreaResults.append(kids.count)
@@ -142,10 +153,10 @@ public enum Traversal {
                         guard case let (kidFacts, .visible(kidFrame))? = read(kid, within: childClip),
                               kidFacts.isEnabled, roles.rule(for: kidFacts.role) == .hint
                         else { continue }
-                        result.found.append(Found(element: kid, role: kidFacts.role, visibleFrame: kidFrame))
+                        result.found.append(Found(element: kid, role: kidFacts.role, visibleFrame: kidFrame, content: kidContent))
                     }
                 } else {
-                    queue.append(contentsOf: kids.map { ($0, childClip) })
+                    queue.append(contentsOf: kids.map { ($0, childClip, kidContent) })
                 }
             }
         }

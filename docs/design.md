@@ -268,23 +268,26 @@ Our own pid is never planned, because AX calls into our own process must run on 
 ## Click policy
 
 The policy is `ClickPolicy.pressWhenAdvertised`, set once in `HintConfig.standard`.
-`ActionPlan.make` turns the policy, the surface, the hit point and the element's advertised actions into steps.
+`ActionPlan.make` turns the policy, the surface, the hit point, the element's advertised actions and its content kind into steps.
+The traversal marks every element found under a `.searchPredicate` container as `.web` content, whether it came from the search or from the `.children` fallback, and every other element as `.native`.
 The probe reads `AXUIElementCopyActionNames` for the chosen element only, one IPC.
 
 1. Raise, for `.window` surfaces only.
    The probe performs `AXRaise` and sets `AXMain` on the element's window, then sets `AXFrontmost` on its app.
    Activation goes through AX because cooperative activation lets macOS 14 and later ignore an agent app's `activate` request.
 2. Act.
-   If the element advertises `AXPress`, the probe presses it.
+   Web content is always clicked, after the same raise.
+   Chrome answers `AXPress` on web elements with `kAXErrorSuccess` and performs nothing, so a successful press does not mean the link was activated.
+   If a native element advertises `AXPress`, the probe presses it.
    `kAXErrorCannotComplete` counts as done on purpose.
    The request reached the app and only the reply timed out, or a menu bar item blocked the reply until its menu closed, so a fallback click could press twice.
    Any other failure falls back to a click.
-3. Click, when there is no `AXPress` or the press failed.
+3. Click, for web content, when there is no `AXPress`, or when the press failed.
    After a raise, the probe waits up to 150 ms for the app to report frontmost, so the click lands on an active window instead of only activating it.
    It posts mouseMoved, leftMouseDown and leftMouseUp through the HID tap with click state 1 and cleared flags, then warps the cursor back.
 
 Background windows therefore come forward and the action fires, as with a real click.
-AXPress is first because it acts on the first attempt even where a view ignores first mouse, and it never moves the cursor.
+For native elements, AXPress is first because it acts on the first attempt even where a view ignores first mouse, and it never moves the cursor.
 Menu bar items, extras and Dock items are never raised.
 Text fields advertise no `AXPress`, so they get a click, which focuses them and places the caret with no special case.
 The policy chooses press versus click only.
@@ -525,7 +528,13 @@ The DEBUG snapshot of one `scripts/e2e.sh` run answers each of these.
 - Does the 50 ms timeout set on an app element bound the calls on elements derived from it, or only the calls on the app element itself?
   Per-pid durations of extras-only jobs answer it.
 - Does `AXPress` on a background window's button act after the raise, and is the app active at press time?
-  The perform report and the fixture's press log answer it.
+  For web content the answer is no, and the raise is not the cause.
+  A link in a visible, not frontmost Chrome window, whose onclick sets `document.title`, was tested three ways through the DEBUG perform report.
+  The plan `raise, press` reported `press: success` and the title did not change.
+  The plan `press` with the raise disabled reported `press: success` and the title did not change.
+  The plan `raise, click` reported `frontmostAfter` true and the title changed.
+  Web content is therefore always clicked.
+  Native controls are not implicated by this evidence, and the fixture's press log still answers the question for them.
 - Is a 300 ms budget enough for Chrome with many tabs open?
   Per-pid durations and stop reasons answer it.
 - Does a ⇧⌘Space posted at the HID tap fire the Carbon hotkey at all?

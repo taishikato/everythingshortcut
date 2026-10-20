@@ -228,7 +228,7 @@ actor AppProbe {
             webAreaResults += harvest.webAreaResults
             for found in harvest.found {
                 let candidate = Candidate(target: ElementRef(probe: self, slot: slots.count), pid: pid, surface: root.surface, frame: found.visibleFrame)
-                slots.append(Slot(element: found.element, window: root.window, surface: root.surface, hitPoint: candidate.hitPoint))
+                slots.append(Slot(element: found.element, window: root.window, surface: root.surface, hitPoint: candidate.hitPoint, content: found.content))
                 candidates.append(candidate)
             }
         }
@@ -278,7 +278,7 @@ actor AppProbe {
     func perform(slot: Int) -> PerformReport {
         let s = slots[slot]
         let advertised = Set(reader.actionNames(s.element))
-        let plan = ActionPlan.make(policy: config.clickPolicy, surface: s.surface, hitPoint: s.hitPoint, advertisedActions: advertised)
+        let plan = ActionPlan.make(policy: config.clickPolicy, surface: s.surface, hitPoint: s.hitPoint, advertisedActions: advertised, content: s.content)
         let frontmostBefore = try? reader.bool(app, kAXFrontmostAttribute)
 
         var raised = false
@@ -381,6 +381,7 @@ private struct Slot {
     let window: AXUIElement?
     let surface: Surface
     let hitPoint: GlobalPoint
+    let content: ElementContent
 }
 
 /// `ElementReader` over live AX. Constructed and used only inside `AppProbe`'s isolation.
