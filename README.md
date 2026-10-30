@@ -1,9 +1,9 @@
-# everything-shortcut
+# everything shortcut
 
 Click anything on your Mac without touching the mouse.
 
 Press ⇧⌘Space and every button, link, menu and Dock icon on your screen gets a short yellow label.
-Type a label's letters and everything-shortcut clicks that item for you.
+Type a label's letters and everything shortcut clicks that item for you.
 
 **[Download for macOS](https://everythingshortcut.com)** · [Try it in your browser](https://everythingshortcut.com/#demo)
 
@@ -63,7 +63,7 @@ If a crowded menu bar hides the icon behind the notch, open the app again from A
   Press it again a couple of seconds later and they appear.
 
 Found something else?
-[Open an issue](https://github.com/taishikato/everything-shortcut/issues).
+[Open an issue](https://github.com/taishikato/everythingshortcut/issues).
 
 ## Build from source
 
