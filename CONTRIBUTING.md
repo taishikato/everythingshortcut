@@ -54,7 +54,8 @@ scripts/release.sh
 ```
 
 The script builds a universal (Apple silicon and Intel) release bundle with `scripts/bundle.sh dist`, signs it with a Developer ID Application identity and the hardened runtime, notarizes it, staples the ticket, and writes `build/release/EverythingShortcut-<version>.zip`.
-It takes the version from `CFBundleShortVersionString` in `Support/Info.plist`, so bump that and `CFBundleVersion` first.
+It takes the version from `CFBundleShortVersionString` in `Support/Info.plist`, so bump that first, for example from `0.1.0` to `0.1.1`.
+`scripts/bundle.sh` copies the same value into `CFBundleVersion`, so there is no separate build number.
 `ES_DIST_IDENTITY` picks another signing identity.
 
 Notarization needs a notarytool keychain profile, stored once per machine:

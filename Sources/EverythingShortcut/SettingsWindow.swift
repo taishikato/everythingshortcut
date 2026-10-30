@@ -163,12 +163,7 @@ final class SettingsModel {
 
     private static let accessibilityPane = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
 
-    let version: String = {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let short = info["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info["CFBundleVersion"] as? String ?? "?"
-        return "Version \(short) (\(build))"
-    }()
+    let version = "Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")"
 
     init(controller: HintController, statusItem: NSStatusItem) {
         self.controller = controller

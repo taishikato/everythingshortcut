@@ -71,6 +71,9 @@ trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/EverythingShortcut.app/Contents/MacOS" "$STAGE/EverythingShortcut.app/Contents/Resources"
 cp "$BIN_DIR/EverythingShortcut" "$STAGE/EverythingShortcut.app/Contents/MacOS/EverythingShortcut"
 cp "$ROOT/Support/Info.plist" "$STAGE/EverythingShortcut.app/Contents/Info.plist"
+# The build number is the version, so CFBundleShortVersionString is the one place a release bumps.
+plutil -insert CFBundleVersion -string "$(plutil -extract CFBundleShortVersionString raw "$ROOT/Support/Info.plist")" \
+  "$STAGE/EverythingShortcut.app/Contents/Info.plist"
 plutil -lint "$STAGE/EverythingShortcut.app/Contents/Info.plist" >&2
 
 # es-dev draws the icon from the badge code on every build, so the bundle's icon cannot drift from the code.
