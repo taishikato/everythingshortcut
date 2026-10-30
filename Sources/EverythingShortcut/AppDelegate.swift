@@ -24,7 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let controller = HintController(config: config)
         controller.onSettingsApplied = { [weak self] in self?.settingsWindow?.refresh() }
-        controller.onSession = { [weak self] in self?.sessionNote($0) }
+        // In place of the system prompt, which macOS shows only once anyway.
+        controller.onNeedsAccessibility = { [weak self] in self?.openSettings() }
         self.controller = controller
         statusItem = makeStatusItem()
         NSApp.mainMenu = mainMenu()
@@ -39,9 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assert(CGWindowLevelForKey(.screenSaverWindow) == Int32(WindowLayer.overlay))
         assert(NSWindow.Level.screenSaver.rawValue == WindowLayer.overlay)
         if launchedForAutomation {
-            let server = AutomationServer(controller: controller, practice: PracticeHook(
-                open: { [weak self] in self?.settingsWindowController()?.showPractice() },
-                dump: { [weak self] in self?.settingsWindow?.practiceDump }
+            let server = AutomationServer(controller: controller, window: WindowHook(
+                open: { [weak self] in self?.openSettings() },
+                frame: { [weak self] in self?.settingsWindow?.windowFrame }
             ))
             server.start()
             automation = server
@@ -56,13 +57,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #else
         false
         #endif
-    }
-
-    /// A trigger refused for lack of Accessibility opens the window at that row, in place of the system
-    /// prompt, which macOS shows only once anyway.
-    private func sessionNote(_ note: SessionNote) {
-        if note == .blocked(.needsAccessibility) { openSettings() }
-        settingsWindow?.note(note)
     }
 
     private func makeStatusItem() -> NSStatusItem {

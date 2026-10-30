@@ -43,7 +43,7 @@ While Secure Event Input is on, a line says labels are paused.
 
 The app has one window.
 It is first-run setup until setup was finished or skipped once, titled "Welcome to Everything Shortcut", and Settings after that, titled "Everything Shortcut Settings".
-Below the app's name and version it lists three steps: Accessibility, the shortcut, and a hands-on try.
+Below the app's name and version it lists two steps: Accessibility and the shortcut.
 "First launch and the app window" below covers the steps.
 The window also holds the "Launch at login" switch and says where the menu bar icon is.
 The switch registers the app with `SMAppService.mainApp`, and when macOS waits for the user's approval it says so and offers to open Login Items.
@@ -165,7 +165,7 @@ clickPolicy: .pressWhenAdvertised,      // or .alwaysClick
 | `Sources/HintCore/RoleTable.swift` | `RoleRule`, `ChildrenSource`, `RoleTable.standard`, and the web search keys. |
 | `Sources/HintCore/Traversal.swift` | `ElementReader`, `NodeFacts`, and `Traversal.harvest`. |
 | `Sources/HintCore/WindowStack.swift` | `WindowSnapshot`, `RunningApps`, `ScanPlan`, `Surface`, and `Visibility`. |
-| `Sources/HintCore/Setup.swift` | `SetupFacts`, `SessionNote.of`, `Practice`, the `SetupGuide` reducer, and `MenuBarIcon.judge`. |
+| `Sources/HintCore/Setup.swift` | `SetupFacts`, the `SetupGuide` reducer, and `MenuBarIcon.judge`. |
 | `Sources/HintCore/ActionPlan.swift` | `ClickPolicy` and `ActionPlan.make`. |
 | `Sources/HintCore/BadgeLayout.swift` | `BadgeLayout.layout(board, displays)` into display-local badges. |
 | `Sources/Desktop/Desktop.swift` | Window snapshot, displays, and running apps from CoreGraphics and NSWorkspace, with no AX. |
@@ -213,8 +213,8 @@ Every core type is a value type and Sendable.
 - `StoredSettings` is the persisted form, two optional raw fields.
   `UserSettings(stored:)` parses it, so a missing or invalid trigger falls back to the standard trigger.
 - `RoleTable` maps role strings to `.hint`, `.container(ChildrenSource, clips:)`, or `.skip`, plus a fallback.
-- `SetupGuide` is the app window's checklist: the facts read from macOS, whether setup is complete, whether Accessibility was requested, and the `Practice` state.
-  Every row, the Return action and the launch decision derive from those four.
+- `SetupGuide` is the app window's checklist: the facts read from macOS, whether setup is complete, and whether Accessibility was requested.
+  Every row, the Return action and the launch decision derive from those three.
 
 The core is generic over `Target`.
 The app instantiates it with `ElementRef`, and tests use `Int`.
@@ -280,7 +280,7 @@ Tracing that flow takes three files: `HintController.swift`, `HintMachine.swift`
 It hides the snapshot, the plan, the queue lanes, the per-app fan-out, AX error classification, web accessibility enablement, and occlusion.
 `AppProbe` exposes `scan` and `perform`, and `ElementRef.perform` is the only way to act on an element.
 `HintController` exposes `triggerPressed`, `send`, `configure`, `suspendTrigger` and `resumeTrigger`, the applied settings and the trigger registration, and read-only diagnostics for the DEBUG hook.
-It also exposes `onSession`, one `SessionNote` per drained event that starts, ends or blocks a session, and `secureInputActive`, the one read of Secure Event Input.
+It also exposes `onNeedsAccessibility`, called when a trigger was refused for lack of Accessibility, and `secureInputActive`, the one read of Secure Event Input.
 No AX or CG type appears on any of those signatures.
 
 ## AXUIElement across threads under Swift 6
@@ -489,15 +489,15 @@ So `SettingsWindowController` stays the only owner of the activation policy, `Se
 
 ### The checklist
 
-The window lists three steps, and the first step that is not done is current.
+The window lists two steps, and the first step that is not done is current.
 
 1. Accessibility is done when `AXIsProcessTrusted()` says so.
 2. The shortcut is done when it registered and no enabled macOS shortcut takes it first.
    A chord another app holds exclusively still reads done, because nothing can see it.
-3. Try it is done when the user typed the label on the Click Me button in the window, or when nobody asked for it.
 
 Steps the Mac can answer check themselves, so a working ⇧⌘Space is already checked on first launch.
-Return does the current step: Open System Settings, or start recording the shortcut, and Done once the first try succeeded.
+Return does the current step: Open System Settings, or start recording the shortcut, and Done once both steps are done.
+Once both steps are done, a Next row, which is not a step, tells the user to press the chord in any app and type a label's letters.
 Escape only stops recording, because Escape also closes labels, and a stray one must not skip setup.
 A done step is a green checkmark, the current one an amber number, and a later one a gray number.
 No yellow badge with letters appears in the window, because on screen that means "type me".
@@ -507,17 +507,6 @@ It is a reducer with a written transition table, like `HintMachine`, and `SetupT
 The shell reads the facts in one function, `SettingsModel.facts(of:)`, on show, on key, after settings apply, and every 0.5 s while the window is open without Accessibility.
 When the grant lands, the guide emits `comeForward`, and the window orders itself above System Settings and requests activation, which macOS may refuse.
 The next step does not need focus, because the shortcut works from any app.
-
-### The try
-
-Click Me is an ordinary SwiftUI button in our own window, labeled by the real scan, whose job for our own pid runs on the main lane.
-Success is exact: the button's action ran while the controller was `performing` a label.
-That holds because our probe presses on the main thread, and SwiftUI runs the action inside the press, before `performed` returns the reducer to idle.
-`HintController` turns each reducer step into a `SessionNote` through `SessionNote.of`, and `HintMachine` does not change.
-The guide classifies how each try ends: labels closed, a label that clicked something else, a click without a label, or secure input.
-Nothing in the try step moves while labels are open, because its status line always holds two lines and every state draws the same views.
-After 8 s with no trigger at all, the step suggests that another app may hold the chord, because no API reports that.
-A new chord, or Try It on the shortcut row after setup, reopens the try.
 
 ### When the window opens
 
@@ -572,13 +561,13 @@ Verification has five layers, and only the last needs a person once.
    A later check relaunches the app with stored settings in the argument domain, which UserDefaults reads before the user's own and never writes.
    The stored trigger is ⌃⌥⌘J, so the check proves the parse at launch, then relaunches the app plainly.
    A launch with `--automation` never opens the app window, so every check before the last one runs with no window of ours on screen.
-   The last check hides the fixture and opens the app window's try step through `openPractice`.
-   It waits until the snapshot has the try step ready, the Click Me frame and the app window's frame, and fails at once when the button lies outside the window, because then a frame conversion is wrong.
-   It then shows labels and types the one on Click Me, and passes when the try step reports success.
-   That proves the main-lane probe, an in-process `AXPress` on a SwiftUI button, and that the button's action ran while the controller was still performing.
+   The last check hides the fixture, opens the app window through `openWindow`, and waits until the snapshot has the window's frame.
+   It then shows labels and requires at least one label of the app whose center lies inside our window.
    It also requires that no label of another app's window behind ours, in a window list es-dev takes while the labels show, has its center inside our window.
    Windows in front of ours are left out, so what happens to be on screen cannot make it flake.
-   The check never closes the window, because closing stores setup completion, and `scripts/e2e.sh` ends the app with `pkill`.
+   It then presses Escape and never closes the window, because closing stores setup completion, and `scripts/e2e.sh` ends the app with `pkill`.
+   It presses nothing in our window, so the main-lane probe's in-process `AXPress` on our own controls is no longer covered by e2e.
+   No control in the window passes both constraints: Skip Setup, Done and closing store setup completion, the login switch writes the login item through `SMAppService`, and the rest leave no trace in the snapshot.
    Beyond the fixture, it requires at least one `statusItem`, `menuBar` or `dock` hint whenever the live window stack exposes a status-level, main-menu or Dock window, so the run also proves the surfaces outside the fixture.
    es-dev prints `VERIFIED` or `NOT VERIFIED` for each check and saves a `screencapture -x` of the badges under `build/e2e/`.
 5. The one manual step is granting Accessibility to `build/EverythingShortcut.app`.
@@ -668,13 +657,11 @@ Candidate B became the base, 27 points to 23, and the cross-judge and the orches
 - We accept one window that is both setup and Settings, with a title that changes after the first close.
   In exchange there is one activation-policy owner, one recorder, and one place that always says what needs the user.
 - We accept scanning our own window on the main thread, 7 to 13 ms per scan in the e2e runs, while it is open.
-  In exchange the try has a real target, our own controls get labels, and badges for apps behind the window no longer draw over it.
+  In exchange our own controls get labels, and badges for apps behind the window no longer draw over it.
 - We accept no labels on our own menu bar and status item, in exchange for never running a menu's tracking loop inside a press on main.
 - We accept that closing the window counts as skipping, and that a quit before closing shows setup again.
   In exchange the title and footer never change while the user reads them, and anything that still matters reopens the window by itself.
-- We accept a timed nudge for a chord another app holds, because nothing else can see one.
 - We accept that coming forward may not take focus, in exchange for not depending on activation that macOS may refuse.
-- We accept a success test for the try that relies on SwiftUI running the button's action inside `AXPress`, because the e2e check proves it on every run.
 - We accept that the e2e run leaves the app window open until the script ends the app, in exchange for never writing the user's settings.
 
 ## Alternatives considered

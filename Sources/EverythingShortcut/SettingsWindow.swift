@@ -63,8 +63,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func refresh() { model.refresh() }
 
-    func note(_ note: SessionNote) { model.note(note) }
-
     /// Activation is only a request, which macOS may refuse an agent app (cooperative activation),
     /// so the window is also ordered above the app the user is in.
     private func comeForward() {
@@ -115,21 +113,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     #if DEBUG
-    /// For the automation hook: the window with the try step ready, as Try It opens it.
-    func showPractice() {
-        show()
-        model.tryAgain()
-    }
-
-    /// Converted when asked, because the window may have moved since the view recorded the frame.
-    var practiceDump: PracticeDump {
-        let primaryHeight = Desktop.displays().primary?.bounds.height ?? 0
-        func global(_ r: NSRect) -> GlobalRect { GlobalRect(AppKitRect(r), primaryDisplayHeight: primaryHeight) }
-        var target: GlobalRect?
-        if case .open = model.guide.practiceRow, let frame = model.practiceTargetFrame, let content = window.contentView {
-            target = global(window.convertToScreen(content.convert(frame, to: nil)))
-        }
-        return PracticeDump(practice: model.guide.practice, target: target, window: window.isVisible ? global(window.frame) : nil)
+    /// The window in global display space for the automation snapshot. Nil while it is not on screen.
+    var windowFrame: GlobalRect? {
+        guard window.isVisible else { return nil }
+        return GlobalRect(AppKitRect(window.frame), primaryDisplayHeight: Desktop.displays().primary?.bounds.height ?? 0)
     }
     #endif
 }
@@ -151,10 +138,6 @@ final class SettingsModel {
 
     @ObservationIgnored var onComeForward: () -> Void = {}
     @ObservationIgnored var onClose: () -> Void = {}
-    #if DEBUG
-    /// The Click Me button in the hosting view's space, recorded by the view for the automation snapshot.
-    @ObservationIgnored var practiceTargetFrame: CGRect?
-    #endif
 
     @ObservationIgnored private let controller: HintController
     @ObservationIgnored private let statusItem: NSStatusItem
@@ -176,8 +159,7 @@ final class SettingsModel {
     static func facts(of controller: HintController) -> SetupFacts {
         SetupFacts(
             trusted: AXIsProcessTrusted(),
-            shortcutWorks: HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger).works,
-            trigger: controller.settings.trigger
+            shortcutWorks: HotKeyCenter.status(controller.triggerRegistration, for: controller.settings.trigger).works
         )
     }
 
@@ -238,17 +220,6 @@ final class SettingsModel {
         SettingsStore.accessibilityPrompted = true
         send(.askedForAccess)
     }
-
-    /// The practice target's action. A label is being acted on exactly while the controller is performing,
-    /// and our own probe presses on the main thread, so the action runs inside that press.
-    func practiceTargetPressed() {
-        let viaLabel = if case .performing = controller.phase { true } else { false }
-        send(.targetPressed(viaLabel: viaLabel))
-    }
-
-    func tryAgain() { send(.tryAgain) }
-
-    func note(_ note: SessionNote) { send(.session(note)) }
 
     /// Skip Setup and Done close the window, and closing is what completes setup.
     func finish() { onClose() }
@@ -343,12 +314,6 @@ final class SettingsModel {
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
-    #if DEBUG
-    /// The hosting view's own space. `.global` on macOS starts at the top of the window frame, title bar
-    /// included, which put the recorded target 28 pt below the button (measured against its AX frame).
-    nonisolated static let rootSpace = "settingsRoot"
-    #endif
-
     var body: some View {
         VStack(spacing: 0) {
             form
@@ -357,7 +322,7 @@ struct SettingsView: View {
                 if model.guide.isComplete {
                     Button("Restore Defaults", action: model.restoreDefaults)
                 } else {
-                    Button(model.guide.practice == .succeeded ? "Done" : "Skip Setup", action: model.finish)
+                    Button(model.guide.current == nil ? "Done" : "Skip Setup", action: model.finish)
                         .keyboardShortcut(model.guide.returnAction == .finish ? .defaultAction : nil)
                 }
             }
@@ -366,9 +331,6 @@ struct SettingsView: View {
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
         .tint(accent)
-        #if DEBUG
-        .coordinateSpace(.named(SettingsView.rootSpace))
-        #endif
     }
 
     private var form: some View {
@@ -389,8 +351,8 @@ struct SettingsView: View {
             Section {
                 AccessRow(model: model)
                 ShortcutRow(model: model)
-                if let row = model.guide.practiceRow {
-                    PracticeStepRow(model: model, row: row)
+                if model.guide.current == nil {
+                    NextActionRow(model: model)
                 }
             }
 
@@ -442,8 +404,7 @@ private struct StepRow<Trailing: View, Content: View>: View {
 }
 
 /// A done step is a green check, the current step an amber number, a later step a gray number.
-/// Never a yellow badge with a letter or number: on screen that means "type me", and the practice asks the
-/// user to find exactly one.
+/// Never a yellow badge with a letter or number: on screen that means "type me".
 private struct StepMark: View {
     let step: SetupStep
     let guide: SetupGuide
@@ -493,20 +454,15 @@ private struct ShortcutRow: View {
     var body: some View {
         let guide = model.guide
         StepRow(step: .shortcut, guide: guide, title: "Shortcut") {
-            HStack {
-                Button(action: model.toggleRecording) {
-                    Text(model.isRecording ? "Type a shortcut…" : model.chord)
-                        .font(.body.weight(.medium))
-                        .frame(minWidth: 120)
-                }
-                .controlSize(.large)
-                .buttonStyle(.bordered)
-                .tint(model.isRecording ? accent : nil)
-                .keyboardShortcut(guide.returnAction == .recordShortcut ? .defaultAction : nil)
-                if guide.practiceRow == nil {
-                    Button("Try It", action: model.tryAgain).controlSize(.large)
-                }
+            Button(action: model.toggleRecording) {
+                Text(model.isRecording ? "Type a shortcut…" : model.chord)
+                    .font(.body.weight(.medium))
+                    .frame(minWidth: 120)
             }
+            .controlSize(.large)
+            .buttonStyle(.bordered)
+            .tint(model.isRecording ? accent : nil)
+            .keyboardShortcut(guide.returnAction == .recordShortcut ? .defaultAction : nil)
         } content: {
             Text(model.isRecording ? "Press the new shortcut. Escape cancels." : "Press it in any app to show labels. Click to change.")
                 .foregroundStyle(.secondary)
@@ -519,64 +475,24 @@ private struct ShortcutRow: View {
     }
 }
 
-/// The hands-on step. Every open state draws the same views, and only the status slot's text changes,
-/// in a slot that always holds two lines, so the target never moves under its label.
-private struct PracticeStepRow: View {
+/// What to do once both steps are done. Not a step, so it has no mark, and its symbol is no yellow badge.
+private struct NextActionRow: View {
     let model: SettingsModel
-    let row: PracticeRow
-    @State private var nudge = false
 
     var body: some View {
-        StepRow(step: .practice, guide: model.guide, title: "Try it") {
-            EmptyView()
-        } content: {
-            switch row {
-            case .locked:
-                Text("After the steps above.").foregroundStyle(.secondary)
-            case .open(let practice):
-                Text("Press \(model.chord). Then type the yellow label on Click Me.").foregroundStyle(.secondary)
-                Button(action: model.practiceTargetPressed) {
-                    Group {
-                        if practice == .succeeded {
-                            Label("Clicked", systemImage: "checkmark")
-                        } else {
-                            Text("Click Me")
-                        }
-                    }
-                    .frame(minWidth: 160)
-                }
-                .controlSize(.large)
-                .disabled(practice == .succeeded)
-                #if DEBUG
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(SettingsView.rootSpace)) } action: { model.practiceTargetFrame = $0 }
-                #endif
-                .padding(.vertical, 6)
-                Text(status(practice))
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "keyboard")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Next").font(.body.weight(.medium))
+                Text("Press \(model.chord) in any app. Then type the letters on a yellow label to click that item.")
                     .foregroundStyle(.secondary)
-                    .lineLimit(2, reservesSpace: true)
-                    .task(id: practice) {
-                        nudge = false
-                        guard practice == .ready else { return }
-                        try? await Task.sleep(for: .seconds(8))
-                        if !Task.isCancelled { nudge = true }
-                    }
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .opacity(row == .locked ? 0.5 : 1)
-    }
-
-    private func status(_ practice: Practice) -> String {
-        let chord = model.chord
-        return switch practice {
-        case .idle, .labelsOpen: ""
-        // After 8 s with no trigger at all, the likely cause is a chord another app holds, which no API reports.
-        case .ready: nudge ? "Nothing happening? Another app may use \(chord).\nPick another shortcut above." : ""
-        case .missed(.closed): "Labels closed. Press \(chord) to try again."
-        case .missed(.elsewhere): "That label clicked something else. Try the one on Click Me."
-        case .missed(.withoutLabel): "Clicked without a label. Press \(chord) first."
-        case .secureInput: "Secure input is on, so labels can't open.\nLeave the password field or turn off Secure Keyboard Entry."
-        case .succeeded: "That's it. Labels work the same in every app, the menu bar and the Dock."
-        }
+        .padding(.vertical, 2)
     }
 }
 

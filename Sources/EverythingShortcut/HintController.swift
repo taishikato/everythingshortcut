@@ -32,8 +32,8 @@ final class HintController {
     /// Runs after new settings took effect, so the settings window can redraw.
     var onSettingsApplied: () -> Void = {}
 
-    /// What the app window learns about sessions. Called once per drained event that starts, ends or blocks one.
-    var onSession: (SessionNote) -> Void = { _ in }
+    /// Runs when a trigger was refused for lack of Accessibility.
+    var onNeedsAccessibility: () -> Void = {}
 
     /// Diagnostics for the log and the DEBUG automation snapshot. Not session state.
     private(set) var lastScanStats: ScanStats?
@@ -86,9 +86,7 @@ final class HintController {
         defer { draining = false }
         while !pending.isEmpty {
             let next = pending.removeFirst()
-            let before = machine.phase
             for effect in machine.send(next) { run(effect) }
-            if let note = SessionNote.of(next, from: before, to: machine.phase) { onSession(note) }
         }
     }
 
@@ -156,7 +154,7 @@ final class HintController {
         log.notice("alert \(String(describing: alert), privacy: .public)")
         switch alert {
         case .needsAccessibility:
-            break   // AppDelegate opens the app window at Accessibility through `onSession`.
+            onNeedsAccessibility()
         case .secureInputActive:
             NSSound.beep()
             notice.show("Labels can't open while a password field or Secure Keyboard Entry is on.")

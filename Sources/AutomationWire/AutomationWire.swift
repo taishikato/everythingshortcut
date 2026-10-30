@@ -35,9 +35,9 @@ public enum AutomationCommand: Codable, Hashable, Sendable {
     case press([AutomationInput])
     /// Apply these settings through the reducer without persisting them. Rejected, not defaulted, when invalid.
     case configure(triggerKeyCode: UInt16, triggerModifiers: UInt8)
-    /// Open the app window with the try step ready. Nothing closes it again: closing stores setup completion,
+    /// Open the app window. Nothing closes it again: closing stores setup completion,
     /// and a run must not write the user's settings, so the script's pkill ends it.
-    case openPractice
+    case openWindow
 }
 
 public struct AutomationRequest: Codable, Hashable, Sendable {
@@ -199,15 +199,10 @@ public struct SessionSnapshot: Codable, Hashable, Sendable {
     public let trigger: TriggerDump
     public let lastScan: ScanDump?
     public let lastPerform: PerformDump?
-    /// The try step, `String(describing:)` of the app's `Practice`, so "ready", "succeeded" or
-    /// "missed(HintCore.Miss.closed)". Nil while the app window was never opened.
-    public let practice: String?
-    /// The try step's Click Me button in global display space. Nil while the step is not open.
-    public let practiceTarget: RectDump?
     /// The app window in global display space. Nil while it is not on screen.
     public let appWindow: RectDump?
 
-    public init(phase: String, typed: String, hints: [HintDump], overlayPanels: [RectDump], accessibilityTrusted: Bool, triggerRegistered: Bool, trigger: TriggerDump, lastScan: ScanDump?, lastPerform: PerformDump?, practice: String?, practiceTarget: RectDump?, appWindow: RectDump?) {
+    public init(phase: String, typed: String, hints: [HintDump], overlayPanels: [RectDump], accessibilityTrusted: Bool, triggerRegistered: Bool, trigger: TriggerDump, lastScan: ScanDump?, lastPerform: PerformDump?, appWindow: RectDump?) {
         self.phase = phase
         self.typed = typed
         self.hints = hints
@@ -217,8 +212,6 @@ public struct SessionSnapshot: Codable, Hashable, Sendable {
         self.trigger = trigger
         self.lastScan = lastScan
         self.lastPerform = lastPerform
-        self.practice = practice
-        self.practiceTarget = practiceTarget
         self.appWindow = appWindow
     }
 }

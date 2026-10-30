@@ -37,7 +37,7 @@ Type a label's letters and everythingshortcut clicks that item for you.
 
 1. Download the zip from [everythingshortcut.com](https://everythingshortcut.com) and open it.
 2. Move Everything Shortcut to your Applications folder and open it.
-3. The setup window walks you through three steps: allow Accessibility, check the shortcut, and try one label.
+3. The setup window walks you through two steps: allow Accessibility and check the shortcut.
 
 It needs macOS 15 or later, on Apple silicon or Intel.
 The download is signed with a Developer ID and notarized by Apple.
