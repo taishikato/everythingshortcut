@@ -8,7 +8,7 @@ public enum SetupStep: Hashable, Sendable, CaseIterable {
 public struct SetupFacts: Hashable, Sendable {
     public var trusted: Bool
     /// Registered, and no enabled macOS shortcut takes it first.
-    /// A chord another app holds exclusively still reads true, because nothing can see it (docs/design.md).
+    /// A chord another app holds exclusively still reads true, because nothing can see it.
     public var shortcutWorks: Bool
 
     public init(trusted: Bool, shortcutWorks: Bool) {

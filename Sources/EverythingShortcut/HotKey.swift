@@ -10,7 +10,7 @@ final class HotKeyCenter {
     enum Registration: Equatable, Sendable {
         case registered
         /// `eventHotKeyExistsErr` when the chord is already registered. A chord another process holds does not
-        /// cause it, measured in docs/design.md, so `.registered` does not prove the chord reaches us.
+        /// cause it (measured), so `.registered` does not prove the chord reaches us.
         case failed(OSStatus)
     }
 
@@ -70,7 +70,7 @@ enum ShortcutStatus: Equatable, Sendable {
     case takenByMacOS
     case notRegistered(OSStatus)
 
-    /// A chord another app holds exclusively still reads `.registered` (docs/design.md).
+    /// A chord another app holds exclusively still reads `.registered`.
     var works: Bool { self == .registered }
 
     /// After "Shortcut ⇧⌘Space: " in the status menu.

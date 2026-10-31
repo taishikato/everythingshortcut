@@ -27,7 +27,7 @@ public enum RoleRule: Hashable, Sendable {
 ///
 /// Hintability is decided by role alone. The scan never calls `AXUIElementCopyActionNames`,
 /// which would double the IPC count per node. Action names are read once, for the chosen
-/// element only, by the action planner. See docs/design.md, "Hintable-role table".
+/// element only, by the action planner.
 ///
 /// Adding a role is one line in `standard`. Flipping a role between hint and container is one word.
 public struct RoleTable: Sendable {

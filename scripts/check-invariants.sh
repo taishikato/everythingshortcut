@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fails when a single-source-of-truth rule from docs/design.md is broken.
+# Fails when a single-source-of-truth rule is broken.
 # usage: scripts/check-invariants.sh    exit 0 when every rule holds
 set -euo pipefail
 cd "$(dirname "$0")/.."

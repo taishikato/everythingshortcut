@@ -2,7 +2,6 @@
 
 Issues and pull requests are welcome.
 For a larger change, open an issue first so we can agree on the approach.
-[docs/design.md](docs/design.md) explains the architecture and its tradeoffs, and [docs/research.md](docs/research.md) collects the sources behind it.
 
 ## Requirements
 
@@ -21,7 +20,7 @@ open build/EverythingShortcut.app
 ```
 
 `swift test` covers the pure core and needs no permissions.
-`scripts/check-invariants.sh` fails when a single-source-of-truth rule from the design doc breaks.
+`scripts/check-invariants.sh` fails when a single-source-of-truth rule breaks, such as AX role strings appearing outside `RoleTable.swift`.
 `scripts/bundle.sh` writes `build/EverythingShortcut.app` and signs it last.
 Its icon comes from `es-dev icon`, which draws the app icon from the badge code on every build.
 

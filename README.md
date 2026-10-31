@@ -74,7 +74,6 @@ open build/EverythingShortcut.app
 ```
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the tests, the end-to-end check, code signing and releases.
-[docs/design.md](docs/design.md) explains how it works.
 
 ## License
 
