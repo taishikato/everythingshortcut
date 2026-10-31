@@ -464,8 +464,9 @@ private struct ShortcutRow: View {
             .tint(model.isRecording ? accent : nil)
             .keyboardShortcut(guide.returnAction == .recordShortcut ? .defaultAction : nil)
         } content: {
-            Text(model.isRecording ? "Press the new shortcut. Escape cancels." : "Press it in any app to show labels. Click to change.")
-                .foregroundStyle(.secondary)
+            if model.isRecording {
+                Text("Press the new shortcut. Escape cancels.").foregroundStyle(.secondary)
+            }
             if !model.triggerError.isEmpty {
                 Text(model.triggerError).foregroundStyle(.red)
             } else if !model.isRecording, let problem = model.shortcut.problem(chord: model.chord) {
