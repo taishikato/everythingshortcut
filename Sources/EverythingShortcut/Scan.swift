@@ -207,7 +207,9 @@ actor AppProbe {
             roots.append(Root(name: "menuBar", element: menuBar, clip: screen, surface: .menuBar, window: nil))
         }
         if !job.windows.isEmpty, let axWindows = rootAttribute({ () throws(ReadError) in try reader.elements(app, kAXWindowsAttribute) }) {
-            for (info, window) in match(job.windows, among: axWindows) {
+            let matched = match(job.windows, among: axWindows, shouldStop: shouldStop)
+            stop = matched.stop
+            for (info, window) in matched.pairs {
                 roots.append(Root(name: "window:\(info.id.raw)", element: window, clip: info.bounds.intersection(screen), surface: .window(info.id), window: window))
             }
         }
@@ -240,13 +242,14 @@ actor AppProbe {
         }
 
         if webAreaResults.contains(0), stop != .unresponsive {
-            webFlags = enableWebAccessibility()
+            webFlags = enableWebAccessibility(shouldStop: shouldStop)
         }
         return finish()
     }
 
     /// Pairs each planned window with its AX window: by `_AXUIElementGetWindow` id, else by an equal frame.
-    private func match(_ planned: [WindowInfo], among axWindows: [AXUIElement]) -> [(WindowInfo, AXUIElement)] {
+    /// `WindowMatching.pair` decides, and reads each unidentified window's frame at most once, under the deadline.
+    private func match(_ planned: [WindowInfo], among axWindows: [AXUIElement], shouldStop: () -> Bool) -> WindowMatching.Result<AXUIElement> {
         var byID: [WindowID: AXUIElement] = [:]
         var unidentified: [AXUIElement] = []
         for window in axWindows {
@@ -257,21 +260,38 @@ actor AppProbe {
                 unidentified.append(window)
             }
         }
-        return planned.compactMap { info in
-            if let window = byID[info.id] { return (info, window) }
-            let byFrame = unidentified.first { (try? reader.facts(of: $0))?.frame == info.bounds }
-            return byFrame.map { (info, $0) }
-        }
+        return WindowMatching.pair(
+            planned: planned, identified: byID, unidentified: unidentified,
+            frame: { (window: AXUIElement) throws(ReadError) -> GlobalRect? in try reader.facts(of: window).frame },
+            shouldStop: shouldStop
+        )
     }
 
     /// Chromium honors `AXEnhancedUserInterface` after a 2 s quiet window, Electron honors
     /// `AXManualAccessibility`. Each is read first and written only when not already true, so repeated
     /// scans do not restart Chromium's timer. Never written false: that destroys Chromium's web tree.
-    private func enableWebAccessibility() -> [String: String] {
+    /// `shouldStop` is checked before each IPC, so a scan that is cancelled or past its deadline writes
+    /// nothing, and the next scan that sees the empty web area tries again.
+    private func enableWebAccessibility(shouldStop: () -> Bool) -> [String: String] {
         var outcome: [String: String] = [:]
         for attribute in ["AXEnhancedUserInterface", "AXManualAccessibility"] {
-            if (try? reader.bool(app, attribute)) == true {
-                outcome[attribute] = "already true"
+            if shouldStop() {
+                outcome[attribute] = "skipped at the deadline"
+                continue
+            }
+            do throws(ReadError) {
+                if try reader.bool(app, attribute) == true {
+                    outcome[attribute] = "already true"
+                    continue
+                }
+            } catch {
+                if error == .unresponsive {
+                    outcome[attribute] = "unresponsive"
+                    break
+                }
+            }
+            if shouldStop() {
+                outcome[attribute] = "skipped at the deadline"
                 continue
             }
             let error = AXUIElementSetAttributeValue(app, attribute as CFString, kCFBooleanTrue)
@@ -305,12 +325,9 @@ actor AppProbe {
         switch plan.act {
         case .press(let fallback):
             let error = AXUIElementPerformAction(s.element, kAXPressAction as CFString)
-            switch error {
-            case .success, .cannotComplete:
-                // cannotComplete counts as done. The request reached the app and only the reply timed
-                // out, or a menu bar item blocked it until its menu closed, so a click could press twice.
+            if ActionPlan.pressIsDone(axError: error.rawValue) {
                 act = .pressed(error)
-            default:
+            } else {
                 click(fallback, afterRaise: raised)
                 act = .pressFailedThenClicked(error)
             }
@@ -371,17 +388,15 @@ enum ProbeQueues {
     static let light = (0..<2).map { DispatchSerialQueue(label: "everything-shortcut.ax.light.\($0)", qos: .userInitiated) }
     static let heavy = (0..<6).map { DispatchSerialQueue(label: "everything-shortcut.ax.heavy.\($0)", qos: .userInitiated) }
 
+    /// `ScanLane.assign` decides the lane. This only maps its answer to the queues.
     static func assign(_ jobs: [AppScan], selfPID: PID) -> [(AppScan, ProbeLane)] {
-        var lightIndex = 0
-        var heavyIndex = 0
-        return jobs.map { job in
-            if job.pid == selfPID { return (job, .main) }
-            if job.isExtrasOnly {
-                defer { lightIndex += 1 }
-                return (job, .queue(light[lightIndex % light.count]))
+        let lanes = ScanLane.assign(jobs, selfPID: selfPID, lightLanes: light.count, heavyLanes: heavy.count)
+        return zip(jobs, lanes).map { job, lane in
+            switch lane {
+            case .main: (job, .main)
+            case .light(let index): (job, .queue(light[index]))
+            case .heavy(let index): (job, .queue(heavy[index]))
             }
-            defer { heavyIndex += 1 }
-            return (job, .queue(heavy[heavyIndex % heavy.count]))
         }
     }
 }
@@ -499,13 +514,9 @@ private struct AXReader: ElementReader {
 }
 
 extension ReadError {
-    /// The AX error boundary. Every AXError the probe sees is classified here and nowhere else.
+    /// The classification itself is `ReadError.init(axError:)` in the core, where it is tested.
     init(_ error: AXError) {
-        switch error {
-        case .cannotComplete: self = .unresponsive
-        case .attributeUnsupported, .parameterizedAttributeUnsupported, .actionUnsupported, .notImplemented: self = .unsupported
-        default: self = .unavailable
-        }
+        self.init(axError: error.rawValue)
     }
 }
 

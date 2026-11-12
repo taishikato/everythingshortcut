@@ -39,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assert(CGWindowLevelForKey(.statusWindow) == Int32(WindowLayer.status))
         assert(CGWindowLevelForKey(.screenSaverWindow) == Int32(WindowLayer.overlay))
         assert(NSWindow.Level.screenSaver.rawValue == WindowLayer.overlay)
+        assert(AXError.success.rawValue == AXErrorCode.success && AXError.cannotComplete.rawValue == AXErrorCode.cannotComplete)
+        assert(AXError.attributeUnsupported.rawValue == AXErrorCode.attributeUnsupported && AXError.actionUnsupported.rawValue == AXErrorCode.actionUnsupported)
+        assert(AXError.notImplemented.rawValue == AXErrorCode.notImplemented && AXError.parameterizedAttributeUnsupported.rawValue == AXErrorCode.parameterizedAttributeUnsupported)
         if launchedForAutomation {
             let server = AutomationServer(controller: controller, window: WindowHook(
                 open: { [weak self] in self?.openSettings() },

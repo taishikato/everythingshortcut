@@ -15,10 +15,8 @@ public enum ClickPolicy: Hashable, Sendable {
 /// `.web` content gets `.click`, because Chrome reports success for `AXPress` on web elements without acting.
 public struct ActionPlan: Hashable, Sendable {
     public enum Act: Hashable, Sendable {
-        /// `AXPress`. If the app answers `kAXErrorActionUnsupported` or `kAXErrorFailure`,
-        /// click `fallback` instead. `kAXErrorCannotComplete` counts as done. The request reached the
-        /// app and only the reply timed out, or a menu bar item blocked it until its menu closed, so
-        /// a fallback click could press twice.
+        /// `AXPress`. `pressIsDone(axError:)` decides whether the press counts as done.
+        /// When it does not, the probe clicks `fallback` instead.
         case press(fallback: GlobalPoint)
         /// Synthesized mouseDown/mouseUp at the point via the HID tap, then the cursor is restored.
         case click(GlobalPoint)
