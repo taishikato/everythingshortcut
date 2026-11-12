@@ -388,17 +388,15 @@ enum ProbeQueues {
     static let light = (0..<2).map { DispatchSerialQueue(label: "everything-shortcut.ax.light.\($0)", qos: .userInitiated) }
     static let heavy = (0..<6).map { DispatchSerialQueue(label: "everything-shortcut.ax.heavy.\($0)", qos: .userInitiated) }
 
+    /// `ScanLane.assign` decides the lane. This only maps its answer to the queues.
     static func assign(_ jobs: [AppScan], selfPID: PID) -> [(AppScan, ProbeLane)] {
-        var lightIndex = 0
-        var heavyIndex = 0
-        return jobs.map { job in
-            if job.pid == selfPID { return (job, .main) }
-            if job.isExtrasOnly {
-                defer { lightIndex += 1 }
-                return (job, .queue(light[lightIndex % light.count]))
+        let lanes = ScanLane.assign(jobs, selfPID: selfPID, lightLanes: light.count, heavyLanes: heavy.count)
+        return zip(jobs, lanes).map { job, lane in
+            switch lane {
+            case .main: (job, .main)
+            case .light(let index): (job, .queue(light[index]))
+            case .heavy(let index): (job, .queue(heavy[index]))
             }
-            defer { heavyIndex += 1 }
-            return (job, .queue(heavy[heavyIndex % heavy.count]))
         }
     }
 }
