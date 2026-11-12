@@ -23,6 +23,7 @@ open build/EverythingShortcut.app
 `scripts/check-invariants.sh` fails when a single-source-of-truth rule breaks, such as AX role strings appearing outside `RoleTable.swift`.
 `scripts/check.sh` runs those three, compiles a release build, and fails if that binary contains the DEBUG automation hook.
 `scripts/release.sh` runs it before it builds the download.
+GitHub Actions runs it on every push to `main` and on every pull request.
 `scripts/bundle.sh` writes `build/EverythingShortcut.app` and signs it last.
 Its icon comes from `es-dev icon`, which draws the app icon from the badge code on every build.
 
