@@ -325,12 +325,9 @@ actor AppProbe {
         switch plan.act {
         case .press(let fallback):
             let error = AXUIElementPerformAction(s.element, kAXPressAction as CFString)
-            switch error {
-            case .success, .cannotComplete:
-                // cannotComplete counts as done. The request reached the app and only the reply timed
-                // out, or a menu bar item blocked it until its menu closed, so a click could press twice.
+            if ActionPlan.pressIsDone(axError: error.rawValue) {
                 act = .pressed(error)
-            default:
+            } else {
                 click(fallback, afterRaise: raised)
                 act = .pressFailedThenClicked(error)
             }
@@ -519,13 +516,9 @@ private struct AXReader: ElementReader {
 }
 
 extension ReadError {
-    /// The AX error boundary. Every AXError the probe sees is classified here and nowhere else.
+    /// The classification itself is `ReadError.init(axError:)` in the core, where it is tested.
     init(_ error: AXError) {
-        switch error {
-        case .cannotComplete: self = .unresponsive
-        case .attributeUnsupported, .parameterizedAttributeUnsupported, .actionUnsupported, .notImplemented: self = .unsupported
-        default: self = .unavailable
-        }
+        self.init(axError: error.rawValue)
     }
 }
 
