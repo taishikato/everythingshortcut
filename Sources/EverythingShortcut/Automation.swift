@@ -191,7 +191,7 @@ final class AutomationServer {
             candidates: s.candidates,
             apps: s.apps.map { a in
                 AppScanDump(
-                    pid: a.pid.raw, roots: a.roots, durationMs: a.duration / .milliseconds(1), nodesRead: a.nodesRead,
+                    pid: a.pid.raw, extrasOnly: a.isExtrasOnly, roots: a.roots, durationMs: a.duration / .milliseconds(1), nodesRead: a.nodesRead,
                     stop: a.stop.map { String(describing: $0) }, candidates: a.candidates,
                     webAreaResults: a.webAreaResults, webFlags: a.webFlags
                 )

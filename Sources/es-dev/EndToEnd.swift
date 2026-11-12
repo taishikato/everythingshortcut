@@ -46,9 +46,11 @@ struct EndToEnd {
             let slowest = scan.apps.sorted { $0.durationMs > $1.durationMs }.prefix(3)
                 .map { "pid \($0.pid) \(Int($0.durationMs)) ms" }
             let stopped = scan.apps.compactMap { app in app.stop.map { (pid: app.pid, why: $0) } }
-            let cutShort = stopped.filter { $0.why == "budget" || $0.why == "nodeLimit" }
+            // A starved extras-only job says how many apps did not answer, not that a walk was cut short.
+            let cutShort = scan.apps.filter(\.wasCutShort).map { "pid \($0.pid) \($0.stop ?? "")" }
+            let starved = scan.apps.filter(\.wasStarved).count
             let stops = stopped.isEmpty ? "none" : stopped.map { "pid \($0.pid) \($0.why)" }.joined(separator: "; ")
-            return (cutShort.isEmpty, "\(Int(scan.durationMs)) ms, \(shown.hints.count) hints, slowest: \(slowest.joined(separator: "; ")), stopped: \(stops)")
+            return (cutShort.isEmpty, "\(Int(scan.durationMs)) ms, \(shown.hints.count) hints, slowest: \(slowest.joined(separator: "; ")), stopped: \(stops), cut short: \(cutShort.isEmpty ? "none" : cutShort.joined(separator: "; ")), extras-only jobs the budget never reached: \(starved)")
         }
 
         await log.step("every exposed menu bar, status item and Dock window yields hints") {

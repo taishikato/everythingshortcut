@@ -9,6 +9,8 @@ import HintCore
 /// What one app contributed to a scan, for the log and the DEBUG snapshot.
 struct AppScanStats: Sendable {
     let pid: PID
+    /// The job read only `AXExtrasMenuBar` (`AppScan.isExtrasOnly`).
+    let isExtrasOnly: Bool
     let roots: [String]
     let duration: Duration
     let nodesRead: Int
@@ -172,7 +174,7 @@ actor AppProbe {
 
         func finish() -> AppHarvest {
             AppHarvest(candidates: candidates, stats: AppScanStats(
-                pid: pid, roots: rootNames, duration: ContinuousClock.now - start, nodesRead: nodesRead,
+                pid: pid, isExtrasOnly: job.isExtrasOnly, roots: rootNames, duration: ContinuousClock.now - start, nodesRead: nodesRead,
                 stop: stop, candidates: candidates.count, webAreaResults: webAreaResults, webFlags: webFlags
             ))
         }

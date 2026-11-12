@@ -24,5 +24,6 @@ let package = Package(
         // Developer tool for an untrusted shell: the window dump, the fixture, the e2e driver, and the app icon.
         .executableTarget(name: "es-dev", dependencies: ["HintCore", "Desktop", "AutomationWire", "Badge"]),
         .testTarget(name: "HintCoreTests", dependencies: ["HintCore"]),
+        .testTarget(name: "AutomationWireTests", dependencies: ["AutomationWire"]),
     ]
 )

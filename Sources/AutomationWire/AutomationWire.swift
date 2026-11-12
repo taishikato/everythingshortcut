@@ -98,6 +98,8 @@ public struct HintDump: Codable, Hashable, Sendable {
 /// One app's part of the last scan.
 public struct AppScanDump: Codable, Hashable, Sendable {
     public let pid: Int32
+    /// The job read only `AXExtrasMenuBar`, on a light lane.
+    public let extrasOnly: Bool
     /// "menuBar", "window:<id>", "statusItems" and "dock", in walk order.
     public let roots: [String]
     public let durationMs: Double
@@ -111,8 +113,9 @@ public struct AppScanDump: Codable, Hashable, Sendable {
     /// Attribute name to what the probe found and did, for `AXEnhancedUserInterface` and `AXManualAccessibility`.
     public let webFlags: [String: String]
 
-    public init(pid: Int32, roots: [String], durationMs: Double, nodesRead: Int, stop: String?, candidates: Int, webAreaResults: [Int], webFlags: [String: String]) {
+    public init(pid: Int32, extrasOnly: Bool, roots: [String], durationMs: Double, nodesRead: Int, stop: String?, candidates: Int, webAreaResults: [Int], webFlags: [String: String]) {
         self.pid = pid
+        self.extrasOnly = extrasOnly
         self.roots = roots
         self.durationMs = durationMs
         self.nodesRead = nodesRead
@@ -121,6 +124,16 @@ public struct AppScanDump: Codable, Hashable, Sendable {
         self.webAreaResults = webAreaResults
         self.webFlags = webFlags
     }
+
+    /// An extras-only job that the budget ended before its one `AXExtrasMenuBar` read.
+    /// Extras-only jobs share two lanes, and each app that does not answer holds its lane for one
+    /// messaging timeout, so with many such apps the jobs at the back of a lane never get their turn.
+    /// How many apps do not answer depends on what is running, not on the scan.
+    public var wasStarved: Bool { extrasOnly && stop == "budget" && roots.isEmpty }
+
+    /// The scan lost part of this app: a walk hit the node limit, or the budget ended a job that had
+    /// started, or one that was to walk a window, a menu bar or the Dock.
+    public var wasCutShort: Bool { stop == "nodeLimit" || (stop == "budget" && !wasStarved) }
 }
 
 /// A menu bar extra dropped because another app exposed one with the same frame.
