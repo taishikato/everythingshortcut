@@ -109,11 +109,16 @@ public enum KeyRouting {
     /// Command, Control and Option chords are swallowed and dropped, so Cmd-W cannot close
     /// a window mid-session. Shift is ignored so uppercase typing matches uppercase badges.
     ///
+    /// A held key repeats as more keyDown events, which the shell marks with `isRepeat`.
+    /// A repeated letter is swallowed and dropped, so holding a key never types the next letter of
+    /// a label. Backspace still repeats, as it does in a text field.
+    ///
     /// `character` is the key's character in the ASCII-capable keyboard layout, so a Japanese IME
     /// in kana mode still yields Latin letters. This function lowercases it.
     public static func route(
         keyCode: UInt16,
         modifiers: Modifiers,
+        isRepeat: Bool,
         character: Character?,
         trigger: HotKey,
         alphabet: Alphabet
@@ -122,7 +127,7 @@ public enum KeyRouting {
         if keyCode == VirtualKey.escape { return .swallow(.escape) }
         if !modifiers.isDisjoint(with: .shortcut) { return .swallow(nil) }
         if keyCode == VirtualKey.delete { return .swallow(.backspace) }
-        guard let c = character.flatMap({ $0.lowercased().first }), alphabet.contains(c) else {
+        guard !isRepeat, let c = character.flatMap({ $0.lowercased().first }), alphabet.contains(c) else {
             return .swallow(nil)
         }
         return .swallow(.letter(c))

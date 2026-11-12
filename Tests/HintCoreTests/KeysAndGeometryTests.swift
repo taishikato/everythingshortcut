@@ -2,8 +2,8 @@ import Testing
 @testable import HintCore
 
 struct KeyRoutingTests {
-    private func route(_ code: UInt16, _ mods: Modifiers = [], _ c: Character? = nil) -> TapVerdict {
-        KeyRouting.route(keyCode: code, modifiers: mods, character: c, trigger: .commandShiftSpace, alphabet: .homeRow)
+    private func route(_ code: UInt16, _ mods: Modifiers = [], _ c: Character? = nil, isRepeat: Bool = false) -> TapVerdict {
+        KeyRouting.route(keyCode: code, modifiers: mods, isRepeat: isRepeat, character: c, trigger: .commandShiftSpace, alphabet: .homeRow)
     }
 
     @Test func triggerChordPassesThroughToCarbon() {
@@ -25,6 +25,14 @@ struct KeyRoutingTests {
         #expect(route(VirtualKey.delete) == .swallow(.backspace))
         #expect(route(1, [.shift], "S") == .swallow(.letter("s")))
         #expect(route(6, [], "z") == .swallow(nil))
+    }
+
+    @Test func aHeldKeyTypesItsLetterOnce() {
+        #expect(route(1, [], "s") == .swallow(.letter("s")))
+        #expect(route(1, [], "s", isRepeat: true) == .swallow(nil), "a repeat must not type the next letter of a label")
+        #expect(route(VirtualKey.delete, isRepeat: true) == .swallow(.backspace))
+        #expect(route(VirtualKey.escape, isRepeat: true) == .swallow(.escape))
+        #expect(route(VirtualKey.space, [.command, .shift], isRepeat: true) == .passThrough)
     }
 }
 

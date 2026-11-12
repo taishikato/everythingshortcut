@@ -65,10 +65,11 @@ final class KeyCapture {
         case .mouseDown where isActive:
             onMouseDown()
             return false
-        case .keyDown(let keyCode, let modifiers) where isActive:
+        case .keyDown(let keyCode, let modifiers, let isRepeat) where isActive:
             let verdict = KeyRouting.route(
                 keyCode: keyCode,
                 modifiers: modifiers,
+                isRepeat: isRepeat,
                 character: layout.character(for: keyCode),
                 trigger: trigger,
                 alphabet: alphabet
@@ -89,7 +90,7 @@ final class KeyCapture {
 
 /// The Sendable facts of one tapped event. The CGEvent itself never crosses into the isolated closure.
 private enum TapEvent: Sendable {
-    case keyDown(keyCode: UInt16, modifiers: Modifiers)
+    case keyDown(keyCode: UInt16, modifiers: Modifiers, isRepeat: Bool)
     case mouseDown
     case tapDisabled
     case other
@@ -117,7 +118,11 @@ private func keyCaptureCallback(
     let capture = Unmanaged<KeyCapture>.fromOpaque(refcon).takeUnretainedValue()
     let tapped: TapEvent = switch type {
     case .keyDown:
-        .keyDown(keyCode: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)), modifiers: Modifiers(event.flags))
+        .keyDown(
+            keyCode: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)),
+            modifiers: Modifiers(event.flags),
+            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        )
     case .leftMouseDown, .rightMouseDown, .otherMouseDown:
         .mouseDown
     case .tapDisabledByTimeout, .tapDisabledByUserInput:

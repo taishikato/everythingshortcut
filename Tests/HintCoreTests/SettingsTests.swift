@@ -17,7 +17,7 @@ struct TriggerValidationTests {
     @Test func everyValidTriggerPassesThroughRoutingAndNoTypedKeyDoes() throws {
         let trigger = try HotKey.validated(keyCode: 38, modifiers: [.control, .option, .command]).get()
         func route(_ code: UInt16, _ mods: Modifiers, _ c: Character?) -> TapVerdict {
-            KeyRouting.route(keyCode: code, modifiers: mods, character: c, trigger: trigger, alphabet: .homeRow)
+            KeyRouting.route(keyCode: code, modifiers: mods, isRepeat: false, character: c, trigger: trigger, alphabet: .homeRow)
         }
         #expect(route(38, [.control, .option, .command], "j") == .passThrough)
         #expect(route(38, [], "j") == .swallow(.letter("j")))
