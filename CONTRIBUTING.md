@@ -21,6 +21,9 @@ open build/EverythingShortcut.app
 
 `swift test` covers the pure core and needs no permissions.
 `scripts/check-invariants.sh` fails when a single-source-of-truth rule breaks, such as AX role strings appearing outside `RoleTable.swift`.
+`scripts/check.sh` runs those three, compiles a release build, and fails if that binary contains the DEBUG automation hook.
+`scripts/release.sh` runs it before it builds the download.
+GitHub Actions runs it on every push to `main` and on every pull request.
 `scripts/bundle.sh` writes `build/EverythingShortcut.app` and signs it last.
 Its icon comes from `es-dev icon`, which draws the app icon from the badge code on every build.
 
@@ -56,6 +59,11 @@ The script builds a universal (Apple silicon and Intel) release bundle with `scr
 It takes the version from `CFBundleShortVersionString` in `Support/Info.plist`, so bump that first, for example from `0.1.0` to `0.1.1`.
 `scripts/bundle.sh` copies the same value into `CFBundleVersion`, so there is no separate build number.
 `ES_DIST_IDENTITY` picks another signing identity.
+The script refuses to start with uncommitted changes or when the tag `v<version>` already exists, and it runs `scripts/check.sh` before it builds.
+The download's binary is stripped, and its dSYM is written beside the zip as `EverythingShortcut-<version>.dSYM.zip`.
+Keep that file and do not publish it, because it is what makes a crash report from that build readable.
+At the end the script tags the commit `v<version>`.
+The tag is local, so publish it with `git push origin v<version>`.
 
 Notarization needs a notarytool keychain profile, stored once per machine:
 

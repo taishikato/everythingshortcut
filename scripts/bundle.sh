@@ -8,7 +8,10 @@
 #
 # dist writes build/dist/EverythingShortcut.app, a universal release build signed with
 # ES_DIST_IDENTITY, else the first Developer ID Application identity, with the hardened runtime
-# and secure timestamp that notarization needs. scripts/release.sh notarizes it.
+# and secure timestamp that notarization needs. Its binary is stripped, and the matching dSYM goes
+# to build/dist/EverythingShortcut.app.dSYM. scripts/release.sh notarizes it.
+#
+# release and dist stop if the binary contains the DEBUG automation hook.
 #
 # usage: scripts/bundle.sh [debug|release|dist]    prints the bundle path on success
 set -euo pipefail
@@ -63,13 +66,40 @@ build() {
 build --product EverythingShortcut >&2
 build --product es-dev >&2
 BIN_DIR="$(build --show-bin-path)"
+BIN="$BIN_DIR/EverythingShortcut"
+
+# The DEBUG automation hook must never ship. Checked on the very binary this bundle is made from.
+# The symbols go through a variable, because `nm | grep -q` under pipefail can hide a match behind SIGPIPE.
+if [ "$CONFIG" = release ]; then
+  SYMBOLS="$(nm -a "$BIN")"
+  if grep -q AutomationServer <<<"$SYMBOLS"; then
+    echo "error: the release binary contains the DEBUG automation hook (AutomationServer)" >&2
+    exit 1
+  fi
+fi
 
 mkdir -p "$OUT"
 STAGE="$(mktemp -d "$OUT/.stage.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
 mkdir -p "$STAGE/EverythingShortcut.app/Contents/MacOS" "$STAGE/EverythingShortcut.app/Contents/Resources"
-cp "$BIN_DIR/EverythingShortcut" "$STAGE/EverythingShortcut.app/Contents/MacOS/EverythingShortcut"
+STAGED_BIN="$STAGE/EverythingShortcut.app/Contents/MacOS/EverythingShortcut"
+cp "$BIN" "$STAGED_BIN"
+
+if [ "$MODE" = dist ]; then
+  # The dSYM is made first, from the unstripped binary and this build's object files, so a crash report
+  # from the stripped download can still be symbolicated. It sits beside the bundle, never inside it.
+  DSYM="$OUT/EverythingShortcut.app.dSYM"
+  rm -rf "$DSYM"
+  xcrun dsymutil "$BIN" -o "$DSYM" >&2
+  # The linked binary carries a debug map with absolute build paths and every local symbol.
+  xcrun strip -S -x "$STAGED_BIN" >&2
+  SYMBOLS="$(nm -ap "$STAGED_BIN")"
+  if grep -q ' OSO ' <<<"$SYMBOLS"; then
+    echo "error: the stripped binary still carries a debug map" >&2
+    exit 1
+  fi
+fi
 cp "$ROOT/Support/Info.plist" "$STAGE/EverythingShortcut.app/Contents/Info.plist"
 # The build number is the version, so CFBundleShortVersionString is the one place a release bumps.
 plutil -insert CFBundleVersion -string "$(plutil -extract CFBundleShortVersionString raw "$ROOT/Support/Info.plist")" \

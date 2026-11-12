@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Package.swift needs Swift 6.2, which ships with Xcode 26. The macos-26 image has it as its default Xcode.
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show the toolchain
+        run: swift --version
+      # The one list of gates. scripts/release.sh runs the same script before a release.
+      - name: Run every gate
+        run: scripts/check.sh
