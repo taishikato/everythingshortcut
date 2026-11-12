@@ -7,27 +7,23 @@ import HintCore
 /// trigger without a restart.
 @MainActor
 final class HotKeyCenter {
-    enum Registration: Equatable, Sendable {
-        case registered
-        /// `eventHotKeyExistsErr` when the chord is already registered. A chord another process holds does not
-        /// cause it (measured), so `.registered` does not prove the chord reaches us.
-        case failed(OSStatus)
-    }
+    typealias Registration = HotKeyRegistration
 
     var onPress: () -> Void = {}
 
+    /// Reads the enabled macOS shortcuts. `ShortcutStatus` decides what they mean for the chord.
     static func status(_ registration: Registration, for hotKey: HotKey) -> ShortcutStatus {
-        if SystemShortcuts.enabled().contains(hotKey) { return .takenByMacOS }
-        return switch registration {
-        case .registered: .registered
-        case .failed(let status): .notRegistered(status)
-        }
+        ShortcutStatus(registration: registration, trigger: hotKey, macOSShortcuts: SystemShortcuts.enabled())
     }
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
     func register(_ hotKey: HotKey) -> Registration {
         if handlerRef == nil {
+            // The core hardcodes these Carbon values, because it imports nothing.
+            assert(ShortcutStatus.chordExistsError == eventHotKeyExistsErr)
+            assert(Modifiers.command.carbonFlags == UInt32(cmdKey) && Modifiers.shift.carbonFlags == UInt32(shiftKey))
+            assert(Modifiers.option.carbonFlags == UInt32(optionKey) && Modifiers.control.carbonFlags == UInt32(controlKey))
             var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
             let status = InstallEventHandler(GetApplicationEventTarget(), hotKeyCallback, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
             guard status == noErr else { return .failed(status) }
@@ -35,7 +31,7 @@ final class HotKeyCenter {
         unregister()
         let status = RegisterEventHotKey(
             UInt32(hotKey.keyCode),
-            Self.carbonModifiers(hotKey.modifiers),
+            hotKey.modifiers.carbonFlags,
             EventHotKeyID(signature: 0x4576_5363, id: 1),   // 'EvSc'
             GetApplicationEventTarget(),
             0,
@@ -51,47 +47,6 @@ final class HotKeyCenter {
     }
 
     fileprivate func fire() { onPress() }
-
-    static func carbonModifiers(_ m: Modifiers) -> UInt32 {
-        var flags = 0
-        if m.contains(.command) { flags |= cmdKey }
-        if m.contains(.shift) { flags |= shiftKey }
-        if m.contains(.option) { flags |= optionKey }
-        if m.contains(.control) { flags |= controlKey }
-        return UInt32(flags)
-    }
-}
-
-/// The applied trigger as the user should hear about it. The status menu and the app window switch over
-/// the same cases.
-enum ShortcutStatus: Equatable, Sendable {
-    case registered
-    /// An enabled macOS shortcut takes the chord first, so it never reaches us.
-    case takenByMacOS
-    case notRegistered(OSStatus)
-
-    /// A chord another app holds exclusively still reads `.registered`.
-    var works: Bool { self == .registered }
-
-    /// After "Shortcut ⇧⌘Space: " in the status menu.
-    var menuText: String {
-        switch self {
-        case .registered: "registered"
-        case .takenByMacOS: "taken by a macOS shortcut"
-        case .notRegistered(let status) where status == eventHotKeyExistsErr: "not registered, the chord is already registered"
-        case .notRegistered(let status): "not registered (error \(status))"
-        }
-    }
-
-    /// The orange line under the shortcut in the app window. Nil when it works.
-    func problem(chord: String) -> String? {
-        switch self {
-        case .registered: nil
-        case .takenByMacOS: "A macOS shortcut already uses \(chord), so it never reaches the app. Pick another one."
-        case .notRegistered(let status) where status == eventHotKeyExistsErr: "Another app already registered \(chord). Pick another one."
-        case .notRegistered(let status): "macOS didn't accept \(chord) (error \(status)). Pick another one."
-        }
-    }
 }
 
 /// Carbon dispatches hotkey events on the main thread, so the callback enters main-actor isolation directly.
@@ -114,19 +69,7 @@ enum SystemShortcuts {
                   let code = entry[kHISymbolicHotKeyCode as String] as? Int, (0..<128).contains(code),
                   let flags = entry[kHISymbolicHotKeyModifiers as String] as? Int
             else { return nil }
-            return HotKey(keyCode: UInt16(code), modifiers: Modifiers(carbon: UInt32(truncatingIfNeeded: flags)))
+            return HotKey(keyCode: UInt16(code), modifiers: Modifiers(carbonFlags: UInt32(truncatingIfNeeded: flags)))
         })
-    }
-}
-
-extension Modifiers {
-    /// The inverse of `HotKeyCenter.carbonModifiers`, ignoring every other Carbon flag.
-    init(carbon flags: UInt32) {
-        var m: Modifiers = []
-        if flags & UInt32(cmdKey) != 0 { m.insert(.command) }
-        if flags & UInt32(shiftKey) != 0 { m.insert(.shift) }
-        if flags & UInt32(optionKey) != 0 { m.insert(.option) }
-        if flags & UInt32(controlKey) != 0 { m.insert(.control) }
-        self = m
     }
 }
